@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Recognition API Test Application</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'fish-blue': '#0ea5e9',
+                        'fish-dark': '#1e293b',
+                        'fish-light': '#f1f5f9'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .video-container {
+            position: relative;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+        
+        .overlay-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+            border: 2px solid red; /* Temporary debug border */
+        }
+        
+        .result-card {
+            transition: all 0.3s ease;
+        }
+        
+        .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-fish-light min-h-screen">
+    <!-- Header -->
+    <header class="bg-fish-dark shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <h1 class="text-3xl font-bold text-white">🐟 Fish Recognition API Test</h1>
+                <div class="flex items-center space-x-4">
+                    <div id="connectionStatus" class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-red-500 rounded-full" id="statusIndicator"></div>
+                        <span class="text-white text-sm" id="statusText">Disconnected</span>
+                    </div>
+                    <button id="helpBtn" class="text-white hover:text-fish-blue transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Mode Selection -->
+        <div class="mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold mb-4 text-fish-dark">Select Testing Mode</h2>
+                <div class="grid md:grid-cols-4 gap-4">
+                    <button id="imageMode" class="mode-btn bg-fish-blue hover:bg-blue-600 text-white p-4 rounded-lg transition-colors active">
+                        <div class="text-2xl mb-2">📷</div>
+                        <div class="font-semibold">Image Upload</div>
+                        <div class="text-sm opacity-90">Test with static images</div>
+                    </button>
+                    <button id="cameraMode" class="mode-btn bg-gray-500 hover:bg-gray-600 text-white p-4 rounded-lg transition-colors">
+                        <div class="text-2xl mb-2">📹</div>
+                        <div class="font-semibold">Live Camera</div>
+                        <div class="text-sm opacity-90">Deteksi &amp; klasifikasi dua tahap</div>
+                    </button>
+                    <button id="batchMode" class="mode-btn bg-gray-500 hover:bg-gray-600 text-white p-4 rounded-lg transition-colors">
+                        <div class="text-2xl mb-2">📚</div>
+                        <div class="font-semibold">Batch Processing</div>
+                        <div class="text-sm opacity-90">Multiple images</div>
+                    </button>
+                    <button id="lwfMode" class="mode-btn bg-gray-500 hover:bg-gray-600 text-white p-4 rounded-lg transition-colors">
+                        <div class="text-2xl mb-2">🧠</div>
+                        <div class="font-semibold">LWF Adaptation</div>
+                        <div class="text-sm opacity-90">Update embeddings</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-xl font-bold mb-4 text-fish-dark">Recognition Settings</h3>
+                
+                <!-- Basic Settings -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-semibold mb-3 text-fish-dark">Basic Options</h4>
+                    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="includeFaces" checked class="form-checkbox h-5 w-5 text-fish-blue">
+                            <span class="text-sm">Include Face Detection</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="includeSegmentation" checked class="form-checkbox h-5 w-5 text-fish-blue">
+                            <span class="text-sm">Include Segmentation</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="includeVisualization" class="form-checkbox h-5 w-5 text-fish-blue" checked>
+                            <span class="text-sm">Show Visualization</span>
+                        </label>
+                        <div class="flex items-center space-x-2">
+                            <label class="text-sm">Quality Threshold:</label>
+                            <input type="range" id="qualityThreshold" min="0.1" max="0.9" step="0.1" value="0.3" class="flex-1">
+                            <span id="qualityValue" class="text-sm font-mono">0.3</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Face Filter Settings -->
+                <div class="border-t pt-6">
+                    <h4 class="text-lg font-semibold mb-3 text-fish-dark">Face Filter Settings</h4>
+                    <div class="grid md:grid-cols-3 gap-4 items-center">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="faceFilterEnabled" checked class="form-checkbox h-5 w-5 text-fish-blue">
+                            <span class="text-sm">Enable Face Filter</span>
+                            <div class="relative group">
+                                <svg class="w-4 h-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <div class="absolute bottom-6 left-0 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 w-48 z-10">
+                                    Prevents human faces from being detected as fish
+                                </div>
+                            </div>
+                        </label>
+                        <div class="flex items-center space-x-2">
+                            <label class="text-sm">IoU Threshold:</label>
+                            <input type="range" id="faceFilterThreshold" min="0.1" max="0.8" step="0.1" value="0.3" class="flex-1">
+                            <span id="faceFilterThresholdValue" class="text-sm font-mono">0.3</span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button id="applyFaceFilterBtn" class="bg-fish-blue hover:bg-blue-600 text-white px-4 py-2 rounded text-sm transition-colors">
+                                Apply Settings
+                            </button>
+                            <button id="resetFaceFilterBtn" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm transition-colors">
+                                Reset
+                            </button>
+                        </div>
+                    </div>
+                    <div id="faceFilterStatus" class="mt-2 text-sm text-gray-600"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Left Panel - Input -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Image Upload Mode -->
+                <div id="imageUploadSection" class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4 text-fish-dark">Upload Image for Recognition</h3>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-fish-blue transition-colors" id="dropZone">
+                        <div class="space-y-4">
+                            <div class="text-4xl">📁</div>
+                            <div>
+                                <p class="text-lg text-gray-600">Drop image here or click to upload</p>
+                                <p class="text-sm text-gray-400">Supports JPEG, PNG, WebP (max 10MB)</p>
+                            </div>
+                            <input type="file" id="imageInput" accept="image/*" class="hidden">
+                            <button id="uploadBtn" class="bg-fish-blue hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors">
+                                Choose Image
+                            </button>
+                        </div>
+                    </div>
+                    <div id="imagePreview" class="mt-4 hidden">
+                        <img id="previewImg" class="max-w-full h-auto rounded-lg shadow-md">
+                        <button id="analyzeBtn" class="mt-4 bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition-colors w-full">
+                            <span id="analyzeText">Analyze Image</span>
+                            <div id="analyzeSpinner" class="loading-spinner mx-auto hidden"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Camera Mode -->
+                <div id="cameraSection" class="bg-white rounded-lg shadow-md p-6 hidden">
+                    <h3 class="text-xl font-bold mb-4 text-fish-dark">Live Camera Recognition</h3>
+                    <div class="video-container">
+                        <video id="videoElement" class="w-full rounded-lg shadow-md" autoplay muted></video>
+                        <canvas id="overlayCanvas" class="overlay-canvas rounded-lg"></canvas>
+                    </div>
+                    <div class="mt-4 flex justify-center space-x-4">
+                        <button id="startCameraBtn" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition-colors">
+                            Start Camera
+                        </button>
+                        <button id="stopCameraBtn" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg transition-colors hidden">
+                            Stop Camera
+                        </button>
+                        <button id="captureBtn" class="bg-fish-blue hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors hidden">
+                            Capture &amp; Analyze
+                        </button>
+                    </div>
+                    <div id="detectionStatusPanel" class="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p id="detectionStatusText" class="text-sm font-semibold text-fish-dark">Stream nonaktif</p>
+                                <p id="detectionInstructionText" class="mt-1 text-xs text-gray-600">Aktifkan kamera untuk memulai deteksi ikan.</p>
+                            </div>
+                            <div class="flex flex-col items-center space-y-1">
+                                <div id="detectionIndicator" class="w-3 h-3 rounded-full bg-gray-400 opacity-40"></div>
+                                <span class="text-[10px] uppercase tracking-wider text-gray-500">Deteksi</span>
+                            </div>
+                        </div>
+                        <div class="mt-3 flex items-center justify-between text-xs text-gray-600">
+                            <span id="detectionConfidenceText">Confidence: -</span>
+                            <span id="detectionStatsText">Stream: 0/0 • Avg 0.00s</span>
+                        </div>
+                    </div>
+                    <div id="cameraSettings" class="mt-4 grid md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Processing Mode</label>
+                            <select id="processingMode" class="w-full p-2 border border-gray-300 rounded-md">
+                                <option value="accuracy">Accuracy (0.5s interval)</option>
+                                <option value="speed">Speed (0.1s interval)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Auto Process</label>
+                            <input type="checkbox" id="autoProcess" checked class="form-checkbox h-5 w-5 text-fish-blue">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Batch Processing Mode -->
+                <div id="batchSection" class="bg-white rounded-lg shadow-md p-6 hidden">
+                    <h3 class="text-xl font-bold mb-4 text-fish-dark">Batch Image Processing</h3>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-fish-blue transition-colors" id="batchDropZone">
+                        <div class="space-y-4">
+                            <div class="text-4xl">📚</div>
+                            <div>
+                                <p class="text-lg text-gray-600">Drop multiple images here or click to upload</p>
+                                <p class="text-sm text-gray-400">Up to 10 images at once</p>
+                            </div>
+                            <input type="file" id="batchInput" accept="image/*" multiple class="hidden">
+                            <button id="batchUploadBtn" class="bg-fish-blue hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors">
+                                Choose Images
+                            </button>
+                        </div>
+                    </div>
+                    <div id="batchPreview" class="mt-4 hidden">
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4" id="batchImages"></div>
+                        <button id="processBatchBtn" class="mt-4 bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition-colors w-full">
+                            <span id="batchText">Process All Images</span>
+                            <div id="batchSpinner" class="loading-spinner mx-auto hidden"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- LWF Adaptation Mode -->
+                <div id="lwfSection" class="bg-white rounded-lg shadow-md p-6 hidden">
+                    <h3 class="text-xl font-bold mb-2 text-fish-dark">Learning Without Forgetting</h3>
+                    <p class="text-sm text-gray-600">Tambahkan embedding baru ke database tanpa melupakan pengetahuan lama. Gunakan hingga 60 gambar (format apa pun).</p>
+
+                    <div class="mt-4 grid md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Species Name</label>
+                            <input id="lwfSpeciesName" type="text" class="w-full p-2 border border-gray-300 rounded-md" placeholder="Contoh: Ikan Mujair">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Scientific Name (optional)</label>
+                            <input id="lwfScientificName" type="text" class="w-full p-2 border border-gray-300 rounded-md" placeholder="Contoh: Oreochromis mossambicus">
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex items-center space-x-2">
+                        <input id="lwfAugment" type="checkbox" class="form-checkbox h-5 w-5 text-fish-blue" checked>
+                        <span class="text-sm text-gray-700">Aktifkan augmentation lanjutan</span>
+                    </div>
+
+                    <div class="mt-4 border-2 border-dashed border-purple-300 rounded-lg p-6 text-center hover:border-purple-500 transition-colors cursor-pointer" id="lwfDropZone">
+                        <div class="space-y-2">
+                            <div class="text-3xl">🧠</div>
+                            <p class="text-sm text-gray-600">Tarik &amp; lepas gambar di sini atau pilih secara manual</p>
+                            <p class="text-xs text-gray-400">Maksimal 60 gambar per batch</p>
+                            <div class="flex justify-center space-x-3 mt-3">
+                                <button id="lwfUploadBtn" type="button" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-xs">Choose Images</button>
+                                <button id="lwfClearBtn" type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-xs">Clear</button>
+                            </div>
+                        </div>
+                        <input id="lwfImages" type="file" accept="image/*" multiple class="hidden" />
+                    </div>
+
+                    <div class="mt-4 hidden" id="lwfPreview">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-2">Images queued</h4>
+                        <ul id="lwfFileList" class="text-xs text-gray-600 space-y-1 max-h-32 overflow-y-auto border border-gray-200 rounded p-3 bg-gray-50"></ul>
+                    </div>
+
+                    <div class="mt-3 text-xs text-gray-500" id="lwfStatus">Select up to 60 images (any format) for adaptation</div>
+
+                    <button id="runLwfBtn" class="mt-6 bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-lg transition-colors w-full md:w-auto">
+                        <span id="lwfButtonText">Run LWF Adaptation</span>
+                        <div id="lwfSpinner" class="loading-spinner mx-auto hidden"></div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel - Results -->
+            <div class="space-y-6">
+                <!-- API Status -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4 text-fish-dark">API Status</h3>
+                    <div id="apiStatus" class="space-y-2">
+                        <div class="flex justify-between">
+                            <span>Health:</span>
+                            <span id="healthStatus" class="font-semibold text-gray-500">Checking...</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Models:</span>
+                            <span id="modelsStatus" class="font-semibold text-gray-500">Unknown</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Device:</span>
+                            <span id="deviceStatus" class="font-semibold text-gray-500">Unknown</span>
+                        </div>
+                    </div>
+                    <button id="refreshStatusBtn" class="mt-4 w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        Refresh Status
+                    </button>
+                </div>
+
+                <!-- Live Statistics -->
+                <div class="stats-card rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4">Live Statistics</h3>
+                    <div id="liveStats" class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span>Processed:</span>
+                            <span id="processedCount">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Success Rate:</span>
+                            <span id="successRate">0%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Avg Time:</span>
+                            <span id="avgTime">0.0s</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Fish Detected:</span>
+                            <span id="fishCount">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Results -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-xl font-bold mb-4 text-fish-dark">Recent Results</h3>
+                    <div id="resultsContainer" class="space-y-4 max-h-96 overflow-y-auto">
+                        <div class="text-center text-gray-500 py-8">
+                            No results yet. Start by uploading an image or using the camera.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg p-6 max-w-2xl w-full max-h-96 overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">How to Use Fish Recognition API</h3>
+                    <button id="closeHelpBtn" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="space-y-4 text-sm">
+                    <div>
+                        <h4 class="font-semibold mb-2">📷 Image Upload Mode</h4>
+                        <p>Upload a single image to analyze fish species. Supports drag & drop or click to upload.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold mb-2">📹 Live Camera Mode</h4>
+                        <p>Gunakan alur dua tahap: stream deteksi real-time memberi sinyal saat ikan sudah fokus, lalu tekan tombol <em>Capture</em> untuk mengirim foto ke backend dan mendapatkan klasifikasi serta segmentasi.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold mb-2">📚 Batch Processing</h4>
+                        <p>Process multiple images at once. Upload up to 10 images for batch analysis.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold mb-2">⚙️ Settings</h4>
+                        <ul class="list-disc list-inside space-y-1 ml-4">
+                            <li><strong>Face Detection:</strong> Detect fish faces in images</li>
+                            <li><strong>Segmentation:</strong> Create precise fish outlines</li>
+                            <li><strong>Visualization:</strong> Show annotated results</li>
+                            <li><strong>Quality Threshold:</strong> Minimum image quality required</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold mb-2">📊 Understanding Results</h4>
+                        <ul class="list-disc list-inside space-y-1 ml-4">
+                            <li><strong>Bounding Box:</strong> Rectangle around detected fish</li>
+                            <li><strong>Confidence:</strong> Detection confidence (0-1)</li>
+                            <li><strong>Species:</strong> Identified fish species name</li>
+                            <li><strong>Accuracy:</strong> Classification confidence</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/fish-recognition-app.js"></script>
+</body>
+</html>
