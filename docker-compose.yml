@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: fish_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fish_recognition}
+      POSTGRES_USER: ${POSTGRES_USER:-fish_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fish_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fish_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fish_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: fish_redis
+    ports:
+      - "${REDIS_PORT:-36379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fish_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: fish_minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fish_network
+
+  # Optional: Django application
+  # Uncomment this if you want to run Django in Docker
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: fish_api
+  #   command: daphne -b 0.0.0.0 -p 8000 fish_recognition_api.asgi:application
+  #   volumes:
+  #     - ./fish_api:/app
+  #     - ./models:/models
+  #   ports:
+  #     - "${API_PORT:-8000}:8000"
+  #   environment:
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fish_user}:${POSTGRES_PASSWORD:-fish_password}@postgres:5432/${POSTGRES_DB:-fish_recognition}
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - MINIO_ENDPOINT=minio:9000
+  #     - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+  #     - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #   networks:
+  #     - fish_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  fish_network:
+    driver: bridge

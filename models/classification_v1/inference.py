@@ -22,6 +22,8 @@ from torchvision import transforms
 import timm
 from timm.models.vision_transformer import VisionTransformer # For type hinting
 
+import json
+import os
 
 # Setup Logger
 logger = logging.getLogger("EmbeddingClassifier")
@@ -63,10 +65,90 @@ class EmbeddingClassifier:
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
 
-        # Create ID to label mapping
-        self.id_to_label = {internal_id: self.keys[internal_id]['label'] for internal_id in self.keys}
+        # Load Indonesian labels from labels.json
+        self._load_indonesian_labels(config["dataset"]["path"])
+        
+        # Create ID to label mapping using the new label_to_indonesian mapping
+        self.id_to_label = {}
+        for internal_id in self.keys:
+            key_data = self.keys[internal_id]
+            original_label = key_data['label']
+            
+            # Use Indonesian name if available, otherwise use original label
+            if original_label in self.label_to_indonesian:
+                display_name = self.label_to_indonesian[original_label]
+                print(f"Mapping internal_id {internal_id}: '{original_label}' -> '{display_name}'")
+            else:
+                display_name = original_label
+                print(f"No Indonesian mapping for '{original_label}', keeping original")
+            
+            self.id_to_label[internal_id] = display_name
         
         logger.info("EmbeddingClassifier initialized successfully.")
+
+        print(f"First 10 ID to Label Mappings: {dict(list(self.id_to_label.items())[:10])}")
+
+    def _load_indonesian_labels(self, dataset_path: str):
+        """Load Indonesian labels from labels.json file"""
+        self.indonesian_labels = {}
+        self.label_to_indonesian = {}  # Direct mapping from original label to Indonesian name
+        
+        # Try to find labels.json in the same directory as dataset
+        dataset_dir = os.path.dirname(dataset_path)
+        labels_path = os.path.join(dataset_dir, 'labels.json')
+        
+        if os.path.exists(labels_path):
+            try:
+                with open(labels_path, 'r', encoding='utf-8') as f:
+                    labels_data = json.load(f)
+                
+                # The labels.json has format: {id: indonesian_name}
+                self.indonesian_labels = labels_data
+                
+                # Create mapping from original English labels to Indonesian names
+                # We'll match by position/index since the IDs in labels.json should correspond 
+                # to the order of species in the database
+                
+                # Get all unique original labels in order
+                original_labels = []
+                for internal_id in sorted(self.keys.keys()):
+                    original_label = self.keys[internal_id]['label']
+                    if original_label not in original_labels:
+                        original_labels.append(original_label)
+                
+                # Map by index position
+                indonesian_names = list(labels_data.values())
+                for i, original_label in enumerate(original_labels):
+                    if i < len(indonesian_names):
+                        self.label_to_indonesian[original_label] = indonesian_names[i]
+                        print(f"Mapped '{original_label}' -> '{indonesian_names[i]}'")
+                    
+                logger.info(f"Loaded {len(self.indonesian_labels)} Indonesian labels from {labels_path}")
+                logger.info(f"Created {len(self.label_to_indonesian)} label mappings")
+                
+            except Exception as e:
+                logger.warning(f"Could not load Indonesian labels from {labels_path}: {e}")
+        else:
+            logger.warning(f"Indonesian labels file not found at {labels_path}")
+            
+        # Create label_to_species_id mapping for reverse lookup (keep existing logic)
+        if self.indonesian_labels:
+            self.label_to_species_id = {}
+            for species_id_str, indonesian_name in self.indonesian_labels.items():
+                try:
+                    species_id = int(species_id_str)
+                    self.label_to_species_id[indonesian_name] = species_id
+                except ValueError:
+                    # Skip if species_id_str is not a valid integer
+                    pass
+            
+            # Add fallback for original labels
+            for internal_id, key_data in self.keys.items():
+                original_label = key_data['label']
+                species_id = key_data.get('species_id', internal_id)
+                if original_label not in self.label_to_species_id:
+                    # Use internal_id as fallback species_id for original labels
+                    self.label_to_species_id[original_label] = internal_id
 
     def _load_model(self, checkpoint_path: str):
         self.model = StableEmbeddingModel(embedding_dim=512, num_classes=639)
@@ -136,9 +218,18 @@ class EmbeddingClassifier:
             fish_results = []
             for label, data in single_fish.items():
                 index = data["index"]
+                
+                # Get species_id from the label
+                species_id = self.label_to_species_id.get(label, 0)
+                
+                # Use Indonesian name if available, otherwise use original label
+                display_name = label
+                if str(species_id) in self.indonesian_labels:
+                    display_name = self.indonesian_labels[str(species_id)]
+                
                 fish_results.append(PredictionResult(
-                    name=label,
-                    species_id=self.label_to_species_id[label],
+                    name=display_name,  # Use Indonesian name here
+                    species_id=species_id,
                     distance=data['similarity'],
                     accuracy=data['similarity'] / data['times'],
                     image_id=self.image_ids[index] if index is not None else None,
@@ -389,4 +480,3 @@ class StableEmbeddingModel(nn.Module):
             
         probabilities = F.softmax(logits, dim=1)
         return emb_norm, probabilities, vis_attn_map if return_attention_map else None
-        
