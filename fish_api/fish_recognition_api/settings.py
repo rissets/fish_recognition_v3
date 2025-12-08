@@ -258,6 +258,12 @@ FISH_MODEL_SETTINGS = {
     'CACHE_TIMEOUT': 3600,  # 1 hour
 }
 
+# Ollama LLM Settings for enhanced fish classification
+OLLAMA_URL = os.getenv('OLLAMA_URL', 'https://ollama.hellodigi.id')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma3:27b')
+LLM_ENABLED = os.getenv('LLM_ENABLED', 'True').lower() == 'true'
+LLM_TIMEOUT = int(os.getenv('LLM_TIMEOUT', '30'))  # seconds
+
 # Logging
 LOGGING = {
     'version': 1,

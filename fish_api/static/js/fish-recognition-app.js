@@ -1588,15 +1588,35 @@ class FishRecognitionApp {
         if (result.fish_detections && result.fish_detections.length > 0) {
             fishDetails = result.fish_detections.map((fish, i) => {
                 const classification = fish.classification?.[0];
+                const llmVerification = fish.llm_verification;
+                
+                let detailsHtml = `<div class="text-xs bg-white p-2 rounded mt-2">
+                    <strong>Fish ${i + 1}:</strong>`;
+                
                 if (classification) {
-                    return `
-                        <div class="text-xs bg-white p-2 rounded mt-2">
-                            <strong>Fish ${i + 1}:</strong> ${classification.name}<br>
-                            <span class="text-gray-600">Accuracy: ${(classification.accuracy * 100).toFixed(1)}%</span>
-                        </div>
-                    `;
+                    detailsHtml += ` ${classification.name}<br>
+                        <span class="text-gray-600">Accuracy: ${(classification.accuracy * 100).toFixed(1)}%</span>`;
                 }
-                return `<div class="text-xs bg-white p-2 rounded mt-2"><strong>Fish ${i + 1}:</strong> Detected</div>`;
+                
+                // Add LLM verification if available
+                if (llmVerification && !llmVerification.error) {
+                    detailsHtml += `<br>
+                        <div class="mt-1 pt-1 border-t border-gray-200">
+                            <span class="text-purple-600 font-semibold">🤖 LLM Verification:</span><br>
+                            <span class="text-gray-700">Scientific: ${llmVerification.scientific_name}</span><br>
+                            <span class="text-gray-700">Indonesian: ${llmVerification.indonesian_name}</span><br>
+                            <span class="text-gray-500 text-[10px]">LLM Time: ${llmVerification.processing_time?.toFixed(2) || 'N/A'}s</span>
+                        </div>`;
+                } else if (llmVerification && llmVerification.error) {
+                    detailsHtml += `<br>
+                        <div class="mt-1 pt-1 border-t border-gray-200">
+                            <span class="text-red-600 text-[10px]">LLM Error: ${llmVerification.error}</span>
+                        </div>`;
+                }
+                
+                detailsHtml += `</div>`;
+                
+                return detailsHtml;
             }).join('');
         }
         

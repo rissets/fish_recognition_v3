@@ -38,6 +38,7 @@ from models.segmentation.inference import Inference
 from models.face_detector.inference import YOLOInference as FaceInference
 
 from ..utils.image_utils import draw_detection_results, image_to_base64
+from ..services.ollama_llm_service import get_ollama_service
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +73,16 @@ class FishRecognitionEngine:
         self.face_filter_enabled = True
         self.face_filter_iou_threshold = 0.3  # IoU threshold for face-fish overlap
         
+        # LLM Enhancement configuration
+        self.llm_enabled = True
+        self.llm_service = None
+        
         # Performance tracking
         self.processing_stats = defaultdict(list)
         
         logger.info("Initializing Fish Recognition Engine...")
         self._load_models()
+        self._initialize_llm()
     
     def _load_models(self):
         """Load all ML models with error handling"""
@@ -191,9 +197,30 @@ class FishRecognitionEngine:
             self.models_loaded = False
             raise
     
+    def _initialize_llm(self):
+        """Initialize LLM service for enhanced classification"""
+        try:
+            if self.llm_enabled:
+                logger.info("Initializing Ollama LLM service...")
+                ollama_url = getattr(settings, 'OLLAMA_URL', 'https://ollama.hellodigi.id')
+                self.llm_service = get_ollama_service(base_url=ollama_url)
+                
+                # Check LLM health
+                health = self.llm_service.health_check()
+                if health['status'] == 'healthy':
+                    logger.info(f"LLM service initialized successfully - Model: {health['model']}")
+                else:
+                    logger.warning(f"LLM service unhealthy: {health.get('error', 'Unknown error')}")
+                    self.llm_enabled = False
+            else:
+                logger.info("LLM enhancement disabled")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM service: {str(e)}")
+            self.llm_enabled = False
+    
     def health_check(self) -> Dict[str, Any]:
         """Check the health status of all models"""
-        return {
+        health_data = {
             "models_loaded": self.models_loaded,
             "device": self.device,
             "models": {
@@ -207,8 +234,22 @@ class FishRecognitionEngine:
                 "iou_threshold": self.face_filter_iou_threshold,
                 "description": "Prevents human faces from being detected as fish"
             },
+            "llm_enhancement": {
+                "enabled": self.llm_enabled,
+                "service_available": self.llm_service is not None
+            },
             "processing_stats": dict(self.processing_stats)
         }
+        
+        # Add LLM health check if enabled
+        if self.llm_enabled and self.llm_service:
+            try:
+                llm_health = self.llm_service.health_check()
+                health_data["llm_enhancement"]["health"] = llm_health
+            except Exception as e:
+                health_data["llm_enhancement"]["health"] = {"status": "error", "error": str(e)}
+        
+        return health_data
     
     def configure_face_filter(self, enabled: bool = True, iou_threshold: float = 0.3):
         """
@@ -229,6 +270,29 @@ class FishRecognitionEngine:
             "enabled": self.face_filter_enabled,
             "iou_threshold": self.face_filter_iou_threshold
         }
+    
+    def configure_llm(self, enabled: bool = True):
+        """
+        Configure LLM enhancement settings
+        
+        Args:
+            enabled: Whether to enable LLM verification
+        """
+        self.llm_enabled = enabled
+        logger.info(f"LLM enhancement configured - Enabled: {enabled}")
+    
+    def get_llm_config(self) -> Dict[str, Any]:
+        """Get current LLM configuration"""
+        config = {
+            "enabled": self.llm_enabled,
+            "service_available": self.llm_service is not None
+        }
+        
+        if self.llm_service:
+            health = self.llm_service.health_check()
+            config["health"] = health
+        
+        return config
     
     def preprocess_image(self, image_data: bytes) -> np.ndarray:
         """Convert image bytes to OpenCV format"""
@@ -597,6 +661,54 @@ class FishRecognitionEngine:
                 # Classify fish
                 classification_results = self.classify_fish(cropped_fish_bgr)
                 fish_result["classification"] = classification_results
+                
+                # LLM Enhancement - Primary identification system
+                if self.llm_enabled and self.llm_service:
+                    try:
+                        llm_start = time.time()
+                        
+                        # Prepare detection info for LLM
+                        detection_info = {
+                            "classification": classification_results,
+                            "detection_confidence": detection["confidence"],
+                            "area": detection["area"]
+                        }
+                        
+                        # Get LLM identification (primary result)
+                        llm_result = self.llm_service.verify_classification(
+                            cropped_fish_bgr,
+                            detection_info
+                        )
+                        
+                        if llm_result:
+                            fish_result["llm_verification"] = {
+                                "scientific_name": llm_result["scientific_name"],
+                                "indonesian_name": llm_result["indonesian_name"],
+                                "processing_time": time.time() - llm_start,
+                                "raw_response": llm_result.get("llm_raw_response", "")
+                            }
+                            
+                            # Override classification dengan LLM result sebagai output utama
+                            # Tambahkan sebagai top prediction
+                            fish_result["classification"].insert(0, {
+                                "name": llm_result["indonesian_name"],
+                                "scientific_name": llm_result["scientific_name"],
+                                "accuracy": 0.95,  # High confidence for LLM result
+                                "source": "llm",
+                                "species_id": -1  # Special ID untuk LLM result
+                            })
+                            
+                            logger.info(f"LLM identified fish {i}: {llm_result['indonesian_name']} ({llm_result['scientific_name']})")
+                        else:
+                            fish_result["llm_verification"] = None
+                            logger.warning(f"LLM verification failed for fish {i}, using model prediction")
+                        
+                        self.processing_stats['llm_verification'].append(time.time() - llm_start)
+                    except Exception as llm_error:
+                        logger.error(f"LLM verification error for fish {i}: {str(llm_error)}")
+                        fish_result["llm_verification"] = {"error": str(llm_error)}
+                else:
+                    fish_result["llm_verification"] = None
                 
                 # Segment fish if requested
                 if include_segmentation:
