@@ -430,6 +430,19 @@ UNFOLD = {
                 ],
             },
             {
+                "title": _("Master Data"),
+                "separator": True,
+                # "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Fish Species"),
+                        "icon": "emoji_nature",
+                        "link": lambda request: "/admin/recognition/fishmasterdata/",
+                        "permission": lambda request: request.user.has_perm("recognition.view_fishmasterdata"),
+                    },
+                ],
+            },
+            {
                 "title": _("Administration"),
                 "separator": True,
                 # "collapsible": True,

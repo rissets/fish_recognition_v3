@@ -1291,7 +1291,8 @@ class DatasetStatisticsView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-from django.db.models import F
+from django.db.models import F, Q
+from rest_framework.pagination import PageNumberPagination
 
 
 # Helper function to update species statistics
@@ -1323,4 +1324,209 @@ def _update_species_statistics(identification):
     stats.average_confidence = avg_confidence or 0.0
     
     stats.save()
+
+
+class FishMasterDataPagination(PageNumberPagination):
+    """Pagination for master data"""
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 200
+
+
+class FishMasterDataListCreateView(APIView):
+    """
+    GET: List all master data with filtering and search
+    POST: Create new master data entry
+    """
+    
+    def get(self, request):
+        """List master data with filters"""
+        from .models import FishMasterData
+        from .serializers import FishMasterDataSerializer
+        
+        queryset = FishMasterData.objects.all()
+        
+        # Search by name
+        search = request.query_params.get('search', '').strip()
+        if search:
+            queryset = queryset.filter(
+                Q(species_indonesia__icontains=search) |
+                Q(species_english__icontains=search) |
+                Q(nama_latin__icontains=search) |
+                Q(nama_daerah__icontains=search) |
+                Q(kelompok__icontains=search)
+            )
+        
+        # Filter by kelompok
+        kelompok = request.query_params.get('kelompok')
+        if kelompok:
+            queryset = queryset.filter(kelompok=kelompok)
+        
+        # Filter by jenis_perairan
+        jenis_perairan = request.query_params.get('jenis_perairan')
+        if jenis_perairan:
+            queryset = queryset.filter(jenis_perairan__icontains=jenis_perairan)
+        
+        # Filter by jenis_konsumsi
+        jenis_konsumsi = request.query_params.get('jenis_konsumsi')
+        if jenis_konsumsi:
+            queryset = queryset.filter(jenis_konsumsi=jenis_konsumsi)
+        
+        # Filter by jenis_hias
+        jenis_hias = request.query_params.get('jenis_hias')
+        if jenis_hias:
+            queryset = queryset.filter(jenis_hias=jenis_hias)
+        
+        # Filter by jenis_dilindungi
+        jenis_dilindungi = request.query_params.get('jenis_dilindungi')
+        if jenis_dilindungi:
+            queryset = queryset.filter(jenis_dilindungi=jenis_dilindungi)
+        
+        # Filter by prioritas
+        prioritas = request.query_params.get('prioritas')
+        if prioritas:
+            queryset = queryset.filter(prioritas=prioritas)
+        
+        # Ordering
+        ordering = request.query_params.get('ordering', 'species_indonesia')
+        if ordering:
+            queryset = queryset.order_by(ordering)
+        
+        # Pagination
+        paginator = FishMasterDataPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        
+        if page is not None:
+            serializer = FishMasterDataSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = FishMasterDataSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        """Create new master data entry"""
+        from .serializers import FishMasterDataSerializer
+        
+        serializer = FishMasterDataSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FishMasterDataDetailView(APIView):
+    """
+    GET: Retrieve specific master data entry
+    PUT: Update master data entry
+    DELETE: Delete master data entry
+    """
+    
+    def get_object(self, pk):
+        """Get master data by ID"""
+        from .models import FishMasterData
+        try:
+            return FishMasterData.objects.get(pk=pk)
+        except FishMasterData.DoesNotExist:
+            return None
+    
+    def get(self, request, pk):
+        """Retrieve master data"""
+        from .serializers import FishMasterDataSerializer
+        
+        obj = self.get_object(pk)
+        if obj is None:
+            return Response(
+                {'error': 'Master data not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = FishMasterDataSerializer(obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def put(self, request, pk):
+        """Update master data"""
+        from .serializers import FishMasterDataSerializer
+        
+        obj = self.get_object(pk)
+        if obj is None:
+            return Response(
+                {'error': 'Master data not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = FishMasterDataSerializer(obj, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def patch(self, request, pk):
+        """Partial update master data"""
+        return self.put(request, pk)
+    
+    def delete(self, request, pk):
+        """Delete master data"""
+        obj = self.get_object(pk)
+        if obj is None:
+            return Response(
+                {'error': 'Master data not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        obj.delete()
+        return Response(
+            {'message': 'Master data deleted successfully'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+
+class FishMasterDataStatsView(APIView):
+    """Get statistics about master data"""
+    
+    def get(self, request):
+        """Get master data statistics"""
+        from .models import FishMasterData
+        from django.db.models import Count
+        
+        total = FishMasterData.objects.count()
+        
+        # By kelompok
+        by_kelompok = FishMasterData.objects.values('kelompok').annotate(
+            count=Count('id')
+        ).order_by('-count')[:10]
+        
+        # By jenis_perairan
+        by_perairan = FishMasterData.objects.values('jenis_perairan').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        # By konsumsi
+        by_konsumsi = FishMasterData.objects.values('jenis_konsumsi').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        # By hias
+        by_hias = FishMasterData.objects.values('jenis_hias').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        # By dilindungi
+        by_dilindungi = FishMasterData.objects.values('jenis_dilindungi').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        # By prioritas
+        by_prioritas = FishMasterData.objects.values('prioritas').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        return Response({
+            'total': total,
+            'by_kelompok': list(by_kelompok),
+            'by_perairan': list(by_perairan),
+            'by_konsumsi': list(by_konsumsi),
+            'by_hias': list(by_hias),
+            'by_dilindungi': list(by_dilindungi),
+            'by_prioritas': list(by_prioritas),
+        }, status=status.HTTP_200_OK)
 

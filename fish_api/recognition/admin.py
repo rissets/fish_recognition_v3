@@ -473,10 +473,165 @@ class FishSpeciesStatisticsAdmin(ModelAdmin):
         verbose_name_plural = _("Species Statistics")
 
 
+class FishMasterDataAdmin(ModelAdmin):
+    """Admin interface for Fish Master Data"""
+    
+    # Unfold icon for sidebar
+    icon = "dataset"
+    
+    list_display = [
+        'species_indonesia',
+        'species_english',
+        'kelompok',
+        'display_jenis_perairan',
+        'display_konsumsi_badge',
+        'display_hias_badge',
+        'display_dilindungi_badge',
+        'prioritas',
+        'min_images',
+        'updated_at',
+    ]
+    
+    list_filter = [
+        'kelompok',
+        'jenis_perairan',
+        'jenis_konsumsi',
+        'jenis_hias',
+        'jenis_dilindungi',
+        'prioritas',
+        ('updated_at', RangeDateTimeFilter),
+    ]
+    
+    search_fields = [
+        'species_indonesia',
+        'species_english',
+        'nama_latin',
+        'nama_daerah',
+        'kelompok',
+        'search_keywords',
+    ]
+    
+    readonly_fields = [
+        'created_at',
+        'updated_at',
+    ]
+    
+    fieldsets = (
+        (_('Basic Information'), {
+            'fields': (
+                'species_indonesia',
+                'species_english',
+                'nama_latin',
+                'nama_daerah',
+                'kelompok',
+            ),
+        }),
+        (_('Classification'), {
+            'fields': (
+                'jenis_perairan',
+                'jenis_konsumsi',
+                'jenis_hias',
+                'jenis_dilindungi',
+                'prioritas',
+            ),
+        }),
+        (_('Metadata'), {
+            'fields': (
+                'search_keywords',
+                'min_images',
+            ),
+        }),
+        (_('Timestamps'), {
+            'fields': (
+                'created_at',
+                'updated_at',
+            ),
+        }),
+    )
+    
+    list_per_page = 50
+    
+    @display(description=_("Jenis Perairan"))
+    def display_jenis_perairan(self, obj):
+        """Display jenis perairan with badges"""
+        if not obj.jenis_perairan:
+            return '-'
+        
+        colors = {
+            'LAUT': '#3B82F6',
+            'TAWAR': '#10B981',
+            'PAYAU': '#F59E0B',
+        }
+        
+        badges = []
+        for jenis in obj.jenis_perairan.split(','):
+            jenis = jenis.strip()
+            color = colors.get(jenis, '#6B7280')
+            badges.append(
+                f'<span style="background-color: {color}; color: white; padding: 2px 8px; '
+                f'border-radius: 4px; font-size: 11px; margin-right: 4px;">{jenis}</span>'
+            )
+        
+        return format_html(''.join(badges))
+    
+    @display(description=_("Konsumsi"), boolean=True)
+    def display_konsumsi_badge(self, obj):
+        """Display consumption status"""
+        return obj.jenis_konsumsi == 'KONSUMSI'
+    
+    @display(description=_("Hias"), boolean=True)
+    def display_hias_badge(self, obj):
+        """Display ornamental status"""
+        return obj.jenis_hias == 'HIAS'
+    
+    @display(description=_("Dilindungi"), boolean=True)
+    def display_dilindungi_badge(self, obj):
+        """Display protected status"""
+        return obj.jenis_dilindungi == 'YA'
+    
+    actions = ['export_to_csv']
+    
+    @admin.action(description=_("Export selected to CSV"))
+    def export_to_csv(self, request, queryset):
+        """Export selected master data to CSV"""
+        import csv
+        from django.http import HttpResponse
+        from datetime import datetime
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="master_data_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'species_indonesia', 'species_english', 'nama_latin', 'nama_daerah',
+            'kelompok', 'jenis_perairan', 'jenis_konsumsi', 'jenis_hias',
+            'jenis_dilindungi', 'prioritas', 'search_keywords', 'min_images'
+        ])
+        
+        for obj in queryset:
+            writer.writerow([
+                obj.species_indonesia,
+                obj.species_english or '',
+                obj.nama_latin or '',
+                obj.nama_daerah or '',
+                obj.kelompok or '',
+                obj.jenis_perairan or '',
+                obj.jenis_konsumsi or '',
+                obj.jenis_hias or '',
+                obj.jenis_dilindungi or '',
+                obj.prioritas,
+                obj.search_keywords or '',
+                obj.min_images,
+            ])
+        
+        return response
+
+
 # Register models with admin site
-from .models import FishIdentification, FishIdentificationHistory, FishSpeciesStatistics
+from .models import FishIdentification, FishIdentificationHistory, FishSpeciesStatistics, FishMasterData
 
 admin.site.register(FishIdentification, FishIdentificationAdmin)
 admin.site.register(FishIdentificationHistory, FishIdentificationHistoryAdmin)
 admin.site.register(FishSpeciesStatistics, FishSpeciesStatisticsAdmin)
+admin.site.register(FishMasterData, FishMasterDataAdmin)
 

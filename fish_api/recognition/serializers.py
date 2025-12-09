@@ -333,4 +333,45 @@ class FishSpeciesStatisticsSerializer(serializers.ModelSerializer):
             'last_seen',
         ]
         read_only_fields = ['id', 'first_seen', 'last_seen', 'accuracy_rate']
-        read_only_fields = ['id', 'first_seen', 'last_seen', 'accuracy_rate']
+
+
+class FishMasterDataSerializer(serializers.ModelSerializer):
+    """Serializer for fish master data"""
+    
+    latin_names_list = serializers.ListField(read_only=True)
+    daerah_names_list = serializers.ListField(read_only=True)
+    
+    class Meta:
+        model = 'recognition.FishMasterData'
+        fields = [
+            'id',
+            'species_indonesia',
+            'species_english',
+            'nama_latin',
+            'nama_daerah',
+            'kelompok',
+            'jenis_perairan',
+            'jenis_konsumsi',
+            'jenis_hias',
+            'jenis_dilindungi',
+            'prioritas',
+            'search_keywords',
+            'min_images',
+            'latin_names_list',
+            'daerah_names_list',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'latin_names_list', 'daerah_names_list']
+    
+    def validate_species_indonesia(self, value):
+        """Validate Indonesian species name"""
+        if not value.strip():
+            raise serializers.ValidationError("Species Indonesia name cannot be empty")
+        return value.strip()
+    
+    def validate_min_images(self, value):
+        """Validate minimum images"""
+        if value < 0:
+            raise serializers.ValidationError("Minimum images must be positive")
+        return value

@@ -36,4 +36,9 @@ urlpatterns = [
     # Dataset Export for Training
     path('dataset/export/', views.ExportDatasetView.as_view(), name='dataset_export'),
     path('dataset/statistics/', views.DatasetStatisticsView.as_view(), name='dataset_statistics'),
+    
+    # Fish Master Data Management
+    path('master-data/', views.FishMasterDataListCreateView.as_view(), name='master_data_list'),
+    path('master-data/<int:pk>/', views.FishMasterDataDetailView.as_view(), name='master_data_detail'),
+    path('master-data/stats/', views.FishMasterDataStatsView.as_view(), name='master_data_stats'),
 ]

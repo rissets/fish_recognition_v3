@@ -205,3 +205,92 @@ class FishSpeciesStatistics(models.Model):
         if self.total_identifications == 0:
             return 0.0
         return (self.correct_identifications / self.total_identifications) * 100
+
+
+class FishMasterData(models.Model):
+    """
+    Master data for fish species from CSV database
+    This represents the knowledge base of fish species
+    """
+    
+    JENIS_PERAIRAN_CHOICES = [
+        ('LAUT', 'Laut'),
+        ('TAWAR', 'Tawar'),
+        ('PAYAU', 'Payau'),
+        ('LAUT, PAYAU', 'Laut & Payau'),
+        ('LAUT, TAWAR', 'Laut & Tawar'),
+        ('PAYAU, TAWAR', 'Payau & Tawar'),
+        ('LAUT, PAYAU, TAWAR', 'Laut, Payau & Tawar'),
+    ]
+    
+    JENIS_KONSUMSI_CHOICES = [
+        ('KONSUMSI', 'Konsumsi'),
+        ('NON KONSUMSI', 'Non Konsumsi'),
+    ]
+    
+    JENIS_HIAS_CHOICES = [
+        ('HIAS', 'Hias'),
+        ('NON HIAS', 'Non Hias'),
+    ]
+    
+    JENIS_DILINDUNGI_CHOICES = [
+        ('YA', 'Ya'),
+        ('TIDAK', 'Tidak'),
+    ]
+    
+    PRIORITAS_CHOICES = [
+        ('HIGH', 'High'),
+        ('MEDIUM', 'Medium'),
+        ('LOW', 'Low'),
+    ]
+    
+    # Basic information
+    species_indonesia = models.CharField(max_length=255, db_index=True, help_text="Nama Indonesia")
+    species_english = models.CharField(max_length=255, blank=True, null=True, help_text="Nama Inggris")
+    nama_latin = models.TextField(help_text="Nama Latin (scientific name)")
+    nama_daerah = models.TextField(blank=True, null=True, help_text="Nama daerah/lokal")
+    kelompok = models.CharField(max_length=100, blank=True, null=True, help_text="Kelompok ikan")
+    
+    # Classification
+    jenis_perairan = models.CharField(max_length=50, choices=JENIS_PERAIRAN_CHOICES, blank=True, null=True)
+    jenis_konsumsi = models.CharField(max_length=20, choices=JENIS_KONSUMSI_CHOICES, blank=True, null=True)
+    jenis_hias = models.CharField(max_length=20, choices=JENIS_HIAS_CHOICES, blank=True, null=True)
+    jenis_dilindungi = models.CharField(max_length=10, choices=JENIS_DILINDUNGI_CHOICES, blank=True, null=True)
+    prioritas = models.CharField(max_length=10, choices=PRIORITAS_CHOICES, default='HIGH')
+    
+    # Search and metadata
+    search_keywords = models.TextField(blank=True, null=True, help_text="Keywords untuk pencarian")
+    min_images = models.IntegerField(default=100, help_text="Minimum jumlah gambar untuk training")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'fish_master_data'
+        ordering = ['species_indonesia']
+        indexes = [
+            models.Index(fields=['species_indonesia']),
+            models.Index(fields=['kelompok']),
+            models.Index(fields=['jenis_perairan']),
+            models.Index(fields=['prioritas']),
+        ]
+        verbose_name = 'Fish Master Data'
+        verbose_name_plural = 'Fish Master Data'
+    
+    def __str__(self):
+        return f"{self.species_indonesia} - {self.nama_latin}"
+    
+    @property
+    def latin_names_list(self):
+        """Get list of latin names"""
+        if not self.nama_latin:
+            return []
+        return [name.strip() for name in self.nama_latin.split(';') if name.strip()]
+    
+    @property
+    def daerah_names_list(self):
+        """Get list of regional names"""
+        if not self.nama_daerah:
+            return []
+        return [name.strip() for name in self.nama_daerah.split(';') if name.strip()]
