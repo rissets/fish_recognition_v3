@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Recognition - Auto Detection Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .status-item {
+            text-align: center;
+            padding: 10px 20px;
+            border-radius: 10px;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .status-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .status-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .status-value.connected {
+            color: #28a745;
+        }
+        
+        .status-value.disconnected {
+            color: #dc3545;
+        }
+        
+        .detection-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #dc3545;
+            animation: pulse 1s infinite;
+        }
+        
+        .detection-indicator.active {
+            background: #28a745;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .panel h2 {
+            margin-bottom: 15px;
+            color: #495057;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        #video {
+            width: 100%;
+            border-radius: 10px;
+            background: #000;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button.primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        button.primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button.danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        button.danger:hover {
+            background: #c82333;
+        }
+        
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .results {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .result-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .fish-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .llm-badge {
+            background: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        
+        .model-badge {
+            background: #007bff;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        
+        .scientific-name {
+            font-style: italic;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+        
+        .accuracy {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .progress-bar {
+            flex: 1;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+        
+        .log {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-left: 3px solid transparent;
+        }
+        
+        .log-entry.info {
+            border-left-color: #4299e1;
+        }
+        
+        .log-entry.success {
+            border-left-color: #48bb78;
+        }
+        
+        .log-entry.warning {
+            border-left-color: #ed8936;
+        }
+        
+        .log-entry.error {
+            border-left-color: #f56565;
+        }
+        
+        .timestamp {
+            color: #a0aec0;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐟 Fish Recognition</h1>
+            <p>Auto-Detection WebSocket Demo</p>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-label">Connection</div>
+                <div class="status-value" id="connectionStatus">Disconnected</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Detection</div>
+                <div class="status-value">
+                    <span class="detection-indicator" id="detectionIndicator"></span>
+                    <span id="detectionCount">0/3</span>
+                </div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Frames Sent</div>
+                <div class="status-value" id="frameCount">0</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Fish Found</div>
+                <div class="status-value" id="fishCount">0</div>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="panel">
+                <h2>📹 Camera Feed</h2>
+                <video id="video" autoplay></video>
+                <div class="controls">
+                    <button class="primary" id="startBtn">Start Camera</button>
+                    <button class="danger" id="stopBtn" disabled>Stop Camera</button>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>🎯 Recognition Results</h2>
+                <div class="results" id="results">
+                    <p style="text-align: center; color: #6c757d; padding: 50px 0;">
+                        No results yet. Start the camera to begin auto-detection!
+                    </p>
+                </div>
+            </div>
+            
+            <div class="panel" style="grid-column: 1 / -1;">
+                <h2>📜 Activity Log</h2>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let video = null;
+        let streaming = false;
+        let frameInterval = null;
+        let frameCounter = 0;
+        let fishCounter = 0;
+        
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const detectionIndicator = document.getElementById('detectionIndicator');
+        const detectionCount = document.getElementById('detectionCount');
+        const frameCount = document.getElementById('frameCount');
+        const fishCount = document.getElementById('fishCount');
+        const resultsDiv = document.getElementById('results');
+        const logDiv = document.getElementById('log');
+        
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8001/ws/recognition/');
+            
+            ws.onopen = () => {
+                log('WebSocket connected!', 'success');
+                connectionStatus.textContent = 'Connected';
+                connectionStatus.className = 'status-value connected';
+                
+                // Enable auto-detection
+                ws.send(JSON.stringify({
+                    type: 'settings_update',
+                    data: {
+                        auto_detection_enabled: true,
+                        include_visualization: false,
+                        include_faces: false,
+                        include_segmentation: false,
+                        processing_mode: 'accuracy'
+                    }
+                }));
+                
+                log('Auto-detection enabled', 'info');
+            };
+            
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleWebSocketMessage(msg);
+            };
+            
+            ws.onerror = (error) => {
+                log('WebSocket error: ' + error, 'error');
+            };
+            
+            ws.onclose = () => {
+                log('WebSocket disconnected', 'warning');
+                connectionStatus.textContent = 'Disconnected';
+                connectionStatus.className = 'status-value disconnected';
+            };
+        }
+        
+        function handleWebSocketMessage(msg) {
+            const type = msg.type;
+            const data = msg.data;
+            
+            if (type === 'detection_status') {
+                const hasFish = data.has_fish;
+                const consecutive = data.consecutive_count;
+                const threshold = data.threshold;
+                
+                detectionCount.textContent = `${consecutive}/${threshold}`;
+                
+                if (hasFish) {
+                    detectionIndicator.classList.add('active');
+                } else {
+                    detectionIndicator.classList.remove('active');
+                }
+                
+                if (consecutive > 0) {
+                    log(`Fish detected: ${consecutive}/${threshold} frames`, 'info');
+                }
+            }
+            
+            else if (type === 'recognition_result') {
+                log('🎯 AUTO-RECOGNITION TRIGGERED!', 'success');
+                
+                const results = data.results;
+                const fishDetections = results.fish_detections || [];
+                
+                fishCounter += fishDetections.length;
+                fishCount.textContent = fishCounter;
+                
+                displayResults(fishDetections, data.processing_time);
+            }
+            
+            else if (type === 'settings_updated') {
+                log('Settings updated successfully', 'success');
+            }
+        }
+        
+        function displayResults(fishDetections, processingTime) {
+            if (fishDetections.length === 0) {
+                return;
+            }
+            
+            resultsDiv.innerHTML = '';
+            
+            fishDetections.forEach((fish, index) => {
+                const classification = fish.classification || [];
+                if (classification.length === 0) return;
+                
+                const top = classification[0];
+                const card = document.createElement('div');
+                card.className = 'result-card';
+                
+                const badge = top.source === 'llm' 
+                    ? '<span class="llm-badge">🤖 LLM</span>'
+                    : '<span class="model-badge">🔬 MODEL</span>';
+                
+                card.innerHTML = `
+                    <div class="result-header">
+                        <div class="fish-name">${top.name}</div>
+                        ${badge}
+                    </div>
+                    <div class="scientific-name">${top.scientific_name || 'Unknown'}</div>
+                    <div class="accuracy">
+                        <strong>Accuracy:</strong>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${(top.accuracy * 100).toFixed(1)}%"></div>
+                        </div>
+                        <span>${(top.accuracy * 100).toFixed(1)}%</span>
+                    </div>
+                    <div style="margin-top: 10px; color: #6c757d; font-size: 0.9em;">
+                        ⏱️ Processing time: ${processingTime.toFixed(2)}s
+                    </div>
+                `;
+                
+                resultsDiv.appendChild(card);
+            });
+        }
+        
+        async function startCamera() {
+            try {
+                log('Requesting camera access...', 'info');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                
+                video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                log('Camera started!', 'success');
+                
+                // Connect WebSocket
+                connectWebSocket();
+                
+                // Start streaming frames
+                setTimeout(() => {
+                    startStreaming();
+                }, 1000);
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+            } catch (error) {
+                log('Camera access denied: ' + error, 'error');
+                alert('Please allow camera access to use this demo');
+            }
+        }
+        
+        function startStreaming() {
+            streaming = true;
+            log('Started streaming frames to server', 'info');
+            
+            frameInterval = setInterval(() => {
+                if (!streaming || !ws || ws.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+                
+                // Capture frame from video
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+                
+                // Convert to base64
+                const frameData = canvas.toDataURL('image/jpeg').split(',')[1];
+                
+                // Send to WebSocket
+                ws.send(JSON.stringify({
+                    type: 'camera_frame',
+                    data: {
+                        frame_data: frameData,
+                        frame_id: ++frameCounter
+                    }
+                }));
+                
+                frameCount.textContent = frameCounter;
+                
+            }, 200); // Send frame every 200ms (~5 FPS)
+        }
+        
+        function stopCamera() {
+            streaming = false;
+            
+            if (frameInterval) {
+                clearInterval(frameInterval);
+            }
+            
+            if (video && video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+            
+            if (ws) {
+                ws.close();
+            }
+            
+            log('Camera stopped', 'warning');
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+        
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+        
+        log('Demo loaded. Click "Start Camera" to begin!', 'info');
+    </script>
+</body>
+</html>

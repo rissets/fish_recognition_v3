@@ -50,13 +50,19 @@ class RecognitionConsumer(AsyncWebsocketConsumer):
         self.quality_threshold = 0.3
         self.adaptive_quality = True
         
+        # Auto-detection settings
+        self.fish_detection_buffer = []  # Buffer untuk tracking deteksi ikan
+        self.consecutive_fish_threshold = 3  # Butuh 3 frame berturut-turut dengan ikan
+        self.max_buffer_size = 5  # Max buffer size
+        
         # Client settings
         self.client_settings = {
             'include_faces': True,
             'include_segmentation': True,
             'include_visualization': True,  # Enable visualization by default for live stream
             'auto_process': True,
-            'processing_mode': 'accuracy'  # 'accuracy' or 'speed'
+            'processing_mode': 'accuracy',  # 'accuracy' or 'speed'
+            'auto_detection_enabled': True  # Enable automatic detection
         }
     
     async def connect(self):
@@ -134,8 +140,13 @@ class RecognitionConsumer(AsyncWebsocketConsumer):
             })
     
     async def handle_camera_frame(self, frame_data: Dict[str, Any]):
-        """Process incoming camera frame from continuous stream"""
-        await self._process_frame(frame_data, enforce_throttle=True, source='stream')
+        """Process incoming camera frame from continuous stream with auto-detection"""
+        # Check if auto-detection is enabled
+        if self.client_settings.get('auto_detection_enabled', True):
+            await self._process_frame_with_auto_detection(frame_data)
+        else:
+            # Original behavior: process with throttle
+            await self._process_frame(frame_data, enforce_throttle=True, source='stream')
 
     async def handle_classification_frame(self, frame_data: Dict[str, Any]):
         """Process captured frame requested explicitly by the client"""
@@ -267,6 +278,163 @@ class RecognitionConsumer(AsyncWebsocketConsumer):
                 'error': str(batch_error),
                 'source': 'batch'
             })
+    
+    async def _process_frame_with_auto_detection(self, frame_data: Dict[str, Any]):
+        """
+        Process frame with automatic fish detection
+        Only performs full recognition when fish detected in consecutive frames
+        """
+        try:
+            self.session_stats['frames_received'] += 1
+            
+            # Validate frame data
+            serializer = CameraFrameSerializer(data=frame_data)
+            if not serializer.is_valid():
+                await self.send_message('frame_error', {
+                    'message': 'Invalid frame data',
+                    'errors': serializer.errors,
+                    'source': 'stream'
+                })
+                return
+            
+            validated_data = serializer.validated_data
+            
+            # Quick fish detection check (lightweight)
+            has_fish = await self._quick_fish_detection(validated_data)
+            
+            # Update detection buffer
+            self.fish_detection_buffer.append(has_fish)
+            if len(self.fish_detection_buffer) > self.max_buffer_size:
+                self.fish_detection_buffer.pop(0)
+            
+            # Count consecutive detections
+            consecutive_count = self._count_consecutive_detections()
+            
+            # Send detection status
+            await self.send_message('detection_status', {
+                'has_fish': has_fish,
+                'consecutive_count': consecutive_count,
+                'threshold': self.consecutive_fish_threshold,
+                'buffer': self.fish_detection_buffer[-3:] if len(self.fish_detection_buffer) >= 3 else self.fish_detection_buffer
+            })
+            
+            # Auto-trigger full recognition if threshold met
+            if consecutive_count >= self.consecutive_fish_threshold:
+                # Check cooldown period
+                current_time = time.time()
+                time_since_last = current_time - self.last_recognition_time_auto
+                
+                if time_since_last < self.recognition_cooldown:
+                    # Still in cooldown, skip
+                    remaining = self.recognition_cooldown - time_since_last
+                    logger.info(f"⏳ Cooldown active: {remaining:.1f}s remaining (prevents duplicate detection)")
+                    await self.send_message('detection_cooldown', {
+                        'remaining_seconds': remaining,
+                        'message': f'Cooldown active - wait {remaining:.1f}s before next recognition'
+                    })
+                    self.session_stats['frames_skipped'] += 1
+                    return
+                
+                logger.info(f"🎯 Auto-detection TRIGGERED! Fish detected in {consecutive_count} consecutive frames")
+                logger.info(f"⚡ Starting FULL RECOGNITION: Detection + Classification + Segmentation + LLM")
+                
+                # Check if we should process (throttle check)
+                if not await self.should_process_frame(enforce_interval=True, respect_auto=False):
+                    self.session_stats['frames_skipped'] += 1
+                    await self.send_message('frame_skipped', {
+                        'reason': 'Processing in progress or too frequent',
+                        'last_processing_time': self.last_processing_time,
+                        'source': 'auto_detection'
+                    })
+                    return
+                
+                # Perform FULL recognition (detection + classification + segmentation + LLM)
+                self.processing_active = True
+                frame_start_time = time.time()
+                
+                try:
+                    result = await self.process_frame(validated_data)
+                    
+                    if result:
+                        self.session_stats['frames_processed'] += 1
+                        processing_time = time.time() - frame_start_time
+                        self.session_stats['total_processing_time'] += processing_time
+                        self.session_stats['last_recognition_time'] = datetime.now()
+                        
+                        # Update last auto-recognition time for cooldown
+                        self.last_recognition_time_auto = time.time()
+                        
+                        # Clear buffer after successful recognition
+                        self.fish_detection_buffer.clear()
+                        
+                        logger.info(f"✅ Recognition complete! Cooldown started: {self.recognition_cooldown}s")
+                        
+                        await self.send_message('recognition_result', {
+                            'frame_id': validated_data.get('frame_id', self.frame_count),
+                            'processing_time': processing_time,
+                            'timestamp': datetime.now().isoformat(),
+                            'results': result,
+                            'source': 'auto_detection',
+                            'trigger': f'fish_detected_{consecutive_count}_frames',
+                            'cooldown_seconds': self.recognition_cooldown
+                        })
+                        
+                        if self.session_stats['frames_processed'] % 10 == 0:
+                            await self.send_session_stats()
+                
+                finally:
+                    self.processing_active = False
+                    self.last_processing_time = time.time()
+                    self.frame_count += 1
+            else:
+                # Not enough consecutive detections, skip processing
+                self.session_stats['frames_skipped'] += 1
+        
+        except Exception as e:
+            logger.error(f"Error in auto-detection processing: {str(e)}")
+            await self.send_message('frame_error', {
+                'message': 'Auto-detection processing failed',
+                'error': str(e),
+                'source': 'auto_detection'
+            })
+            self.processing_active = False
+    
+    async def _quick_fish_detection(self, frame_data: Dict[str, Any]) -> bool:
+        """
+        Perform quick fish detection check without full recognition
+        Uses ONLY YOLO detection model, skipping classification and segmentation
+        This is lightweight and fast (~50-100ms) for real-time streaming
+        """
+        try:
+            # Convert base64 to image
+            image_bgr = await database_sync_to_async(base64_to_image)(frame_data['frame_data'])
+            
+            # Get detection engine
+            engine = await database_sync_to_async(get_fish_engine)()
+            
+            # Quick detection only (YOLO detection, NO classification, NO segmentation)
+            detections = await database_sync_to_async(engine.detect_fish)(image_bgr)
+            
+            # Check if any fish detected
+            has_fish = len(detections) > 0
+            
+            logger.debug(f"🔍 Quick detection (YOLO only): {'✓ Fish found' if has_fish else '✗ No fish'} ({len(detections)} objects)")
+            
+            return has_fish
+            
+        except Exception as e:
+            logger.error(f"Quick detection failed: {str(e)}")
+            return False
+    
+    def _count_consecutive_detections(self) -> int:
+        """Count consecutive True values from the end of buffer"""
+        count = 0
+        for detection in reversed(self.fish_detection_buffer):
+            if detection:
+                count += 1
+            else:
+                break
+        return count
 
     async def _process_frame(self, frame_data: Dict[str, Any], *, enforce_throttle: bool, source: str):
         try:
@@ -333,8 +501,14 @@ class RecognitionConsumer(AsyncWebsocketConsumer):
             self.processing_active = False
     
     async def process_frame(self, frame_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Process a single camera frame"""
+        """
+        Process a single camera frame with FULL RECOGNITION
+        This includes: Detection + Classification + Segmentation (+ LLM)
+        Called only after auto-detection threshold is met (3 consecutive frames)
+        """
         try:
+            logger.info("🔬 FULL RECOGNITION started: Detection → Classification → Segmentation → LLM")
+            
             # Convert base64 to image
             image_bgr = await database_sync_to_async(base64_to_image)(frame_data['frame_data'])
             
@@ -363,12 +537,19 @@ class RecognitionConsumer(AsyncWebsocketConsumer):
             # Get fish recognition engine
             engine = await database_sync_to_async(get_fish_engine)()
             
-            # Process image with engine
+            # FULL RECOGNITION: Detection + Classification + Segmentation
+            logger.info("🐟 Running detection model...")
+            logger.info("🔬 Running classification model...")
+            logger.info("✂️  Running segmentation model...")
+            logger.info("🤖 Running LLM verification...")
+            
             recognition_results = await database_sync_to_async(engine.process_image)(
                 image_data=image_bytes,
                 include_faces=frame_data.get('include_faces', self.client_settings['include_faces']),
                 include_segmentation=frame_data.get('include_segmentation', self.client_settings['include_segmentation'])
             )
+            
+            logger.info("✅ FULL RECOGNITION completed successfully")
             
             # Generate visualization if requested
             include_visualization = frame_data.get('include_visualization', self.client_settings.get('include_visualization', False))
