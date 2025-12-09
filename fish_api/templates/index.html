@@ -387,7 +387,12 @@
 
                 <!-- Recent Results -->
                 <div class="bg-white rounded-lg shadow-md p-6">
-                    <h3 class="text-xl font-bold mb-4 text-fish-dark">Recent Results</h3>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-fish-dark">Recent Results</h3>
+                        <button id="testCorrectionBtn" class="text-xs bg-orange-100 text-orange-600 px-3 py-1 rounded hover:bg-orange-200 transition-colors">
+                            🔧 Test Correction
+                        </button>
+                    </div>
                     <div id="resultsContainer" class="space-y-4 max-h-96 overflow-y-auto">
                         <div class="text-center text-gray-500 py-8">
                             No results yet. Start by uploading an image or using the camera.
@@ -443,6 +448,54 @@
                         </ul>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Correction Modal -->
+    <div id="correctionModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg p-6 max-w-lg w-full">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-fish-dark">🔧 Koreksi Identifikasi Ikan</h3>
+                    <button id="closeCorrectionBtn" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <form id="correctionForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Ilmiah (Scientific Name) *</label>
+                        <input type="text" id="correctScientificName" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-fish-blue focus:border-transparent" placeholder="Contoh: Oreochromis mossambicus">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Indonesia *</label>
+                        <input type="text" id="correctIndonesianName" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-fish-blue focus:border-transparent" placeholder="Contoh: Ikan Mujair">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Inggris (opsional)</label>
+                        <input type="text" id="correctEnglishName" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-fish-blue focus:border-transparent" placeholder="Contoh: Mozambique Tilapia">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Kelompok (opsional)</label>
+                        <input type="text" id="correctKelompok" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-fish-blue focus:border-transparent" placeholder="Contoh: Ikan Air Tawar">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Catatan Koreksi (opsional)</label>
+                        <textarea id="correctNotes" rows="3" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-fish-blue focus:border-transparent" placeholder="Jelaskan alasan koreksi..."></textarea>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button type="submit" class="flex-1 bg-fish-blue hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center">
+                            <span id="correctionSubmitText">Simpan Koreksi</span>
+                            <div id="correctionSpinner" class="loading-spinner ml-2 hidden"></div>
+                        </button>
+                        <button type="button" id="cancelCorrectionBtn" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors">
+                            Batal
+                        </button>
+                    </div>
+                </form>
+                <div id="correctionStatus" class="mt-4 text-sm hidden"></div>
             </div>
         </div>
     </div>

@@ -1,0 +1,761 @@
+{% extends 'unfold/layouts/base.html' %}
+{% load i18n static custom_filters %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-container {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+    
+    .dashboard-header {
+        margin-bottom: 2rem;
+    }
+    
+    .dashboard-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #fff;
+        margin-bottom: 0.75rem;
+    }
+    
+    .dashboard-subtitle {
+        font-size: 1.125rem;
+        color: #9ca3af;
+    }
+    
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    @media (min-width: 640px) {
+        .metrics-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    
+    @media (min-width: 1024px) {
+        .metrics-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+    
+    .metric-card {
+        position: relative;
+        overflow: hidden;
+        border-radius: 1rem;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        padding: 1.5rem;
+        color: white;
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: scale(1.05);
+    }
+    
+    .metric-card-blue {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    }
+    
+    .metric-card-orange {
+        background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    }
+    
+    .metric-card-green {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+    
+    .metric-card-purple {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    }
+    
+    .metric-icon-bg {
+        position: absolute;
+        top: -1rem;
+        right: -1rem;
+        opacity: 0.2;
+        width: 8rem;
+        height: 8rem;
+    }
+    
+    .metric-content {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .metric-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        opacity: 0.9;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-badge {
+        display: inline-block;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 9999px;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    
+    .metric-link {
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    .metric-link:hover {
+        text-decoration: underline;
+    }
+    
+    .charts-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    @media (min-width: 1024px) {
+        .charts-grid {
+            grid-template-columns: repeat(5, 1fr);
+        }
+        
+        .chart-activity {
+            grid-column: span 3;
+        }
+        
+        .chart-status {
+            grid-column: span 2;
+        }
+    }
+    
+    .chart-card {
+        background: #1f2937;
+        border-radius: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #374151;
+        padding: 1.5rem;
+    }
+    
+    .chart-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+    }
+    
+    .chart-title {
+        display: flex;
+        align-items: center;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #fff;
+    }
+    
+    .chart-icon-wrapper {
+        background: rgba(59, 130, 246, 0.2);
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        margin-right: 0.75rem;
+    }
+    
+    .chart-icon-wrapper-green {
+        background: rgba(16, 185, 129, 0.2);
+    }
+    
+    .chart-icon {
+        width: 1.5rem;
+        height: 1.5rem;
+        color: #60a5fa;
+    }
+    
+    .chart-icon-green {
+        color: #34d399;
+    }
+    
+    .chart-meta {
+        font-size: 0.875rem;
+        color: #9ca3af;
+    }
+    
+    .activity-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    
+    .activity-date {
+        width: 5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #d1d5db;
+    }
+    
+    .activity-bar-container {
+        flex: 1;
+        margin: 0 1rem;
+    }
+    
+    .activity-bar-bg {
+        background: #374151;
+        border-radius: 9999px;
+        height: 0.75rem;
+        overflow: hidden;
+    }
+    
+    .activity-bar {
+        background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+        height: 0.75rem;
+        border-radius: 9999px;
+        transition: width 0.5s ease-in-out;
+    }
+    
+    .activity-count {
+        width: 3rem;
+        text-align: right;
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: #fff;
+    }
+    
+    .status-item {
+        margin-bottom: 1.25rem;
+    }
+    
+    .status-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .status-label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #d1d5db;
+    }
+    
+    .status-value {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #fff;
+    }
+    
+    .status-bar-bg {
+        background: #374151;
+        border-radius: 9999px;
+        height: 0.75rem;
+        overflow: hidden;
+    }
+    
+    .status-bar {
+        height: 0.75rem;
+        border-radius: 9999px;
+        transition: width 0.5s ease-in-out;
+    }
+    
+    .table-card {
+        background: #1f2937;
+        border-radius: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #374151;
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+    
+    .table-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #374151;
+    }
+    
+    .table-title {
+        display: flex;
+        align-items: center;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #fff;
+    }
+    
+    .table-icon-wrapper {
+        background: rgba(99, 102, 241, 0.2);
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        margin-right: 0.75rem;
+    }
+    
+    .table-icon {
+        width: 1.5rem;
+        height: 1.5rem;
+        color: #818cf8;
+    }
+    
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .data-table thead {
+        background: #111827;
+    }
+    
+    .data-table th {
+        padding: 1rem 1.5rem;
+        text-align: left;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .data-table tbody tr {
+        border-bottom: 1px solid #374151;
+        transition: background 0.15s;
+    }
+    
+    .data-table tbody tr:hover {
+        background: rgba(55, 65, 81, 0.5);
+    }
+    
+    .data-table td {
+        padding: 1rem 1.5rem;
+    }
+    
+    .rank-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 9999px;
+        background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+        color: white;
+        font-weight: 700;
+        font-size: 0.875rem;
+    }
+    
+    .species-name {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #fff;
+        font-style: italic;
+    }
+    
+    .species-local {
+        font-size: 0.875rem;
+        color: #9ca3af;
+    }
+    
+    .count-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        background: rgba(59, 130, 246, 0.2);
+        color: #60a5fa;
+    }
+    
+    .accuracy-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .accuracy-bar-container {
+        flex: 1;
+        max-width: 12rem;
+        background: #374151;
+        border-radius: 9999px;
+        height: 0.625rem;
+        overflow: hidden;
+    }
+    
+    .accuracy-bar {
+        background: linear-gradient(90deg, #34d399 0%, #059669 100%);
+        height: 0.625rem;
+        border-radius: 9999px;
+        transition: width 0.5s ease-in-out;
+    }
+    
+    .accuracy-text {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #d1d5db;
+        min-width: 3rem;
+    }
+    
+    .empty-state {
+        padding: 3rem 1.5rem;
+        text-align: center;
+    }
+    
+    .empty-icon {
+        width: 4rem;
+        height: 4rem;
+        margin: 0 auto 1rem;
+        opacity: 0.5;
+        color: #6b7280;
+    }
+    
+    .empty-title {
+        font-size: 1.125rem;
+        font-weight: 500;
+        color: #6b7280;
+    }
+    
+    .empty-subtitle {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+    
+    .actions-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    @media (min-width: 768px) {
+        .actions-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+    
+    .action-card {
+        position: relative;
+        overflow: hidden;
+        border-radius: 1rem;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        padding: 1.5rem;
+        color: white;
+        text-decoration: none;
+        display: block;
+        transition: transform 0.2s;
+    }
+    
+    .action-card:hover {
+        transform: scale(1.05);
+    }
+    
+    .action-card-orange {
+        background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    }
+    
+    .action-card-blue {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    }
+    
+    .action-card-green {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+    
+    .action-icon-bg {
+        position: absolute;
+        top: -1rem;
+        right: -1rem;
+        opacity: 0.1;
+        width: 8rem;
+        height: 8rem;
+    }
+    
+    .action-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .action-info {
+        flex: 1;
+    }
+    
+    .action-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    
+    .action-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        opacity: 0.9;
+    }
+    
+    .action-arrow {
+        width: 2rem;
+        height: 2rem;
+        transition: transform 0.2s;
+    }
+    
+    .action-card:hover .action-arrow {
+        transform: translateX(0.5rem);
+    }
+</style>
+
+<div class="dashboard-container">
+    <!-- Page Header -->
+    <div class="dashboard-header">
+        <h1 class="dashboard-title">
+            🐟 Fish Recognition Dashboard
+        </h1>
+        <p class="dashboard-subtitle">
+            Monitor and manage your fish identification system in real-time
+        </p>
+    </div>
+
+    <!-- Key Metrics Grid -->
+    <div class="metrics-grid">
+        <!-- Total Identifications Card -->
+        <div class="metric-card metric-card-blue">
+            <svg class="metric-icon-bg" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path>
+                <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"></path>
+            </svg>
+            <div class="metric-content">
+                <p class="metric-label">Total Identifications</p>
+                <p class="metric-value">{{ total_identifications|default:0 }}</p>
+                <span class="metric-badge">
+                    +{{ recent_identifications|default:0 }} this week
+                </span>
+            </div>
+        </div>
+
+        <!-- Pending Review Card -->
+        <div class="metric-card metric-card-orange">
+            <svg class="metric-icon-bg" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+            </svg>
+            <div class="metric-content">
+                <p class="metric-label">Pending Review</p>
+                <p class="metric-value">{{ pending_review|default:0 }}</p>
+                <a href="/admin/recognition/fishidentification/?status__exact=pending" class="metric-link">
+                    Review now →
+                </a>
+            </div>
+        </div>
+
+        <!-- AI Accuracy Card -->
+        <div class="metric-card metric-card-green">
+            <svg class="metric-icon-bg" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>
+            <div class="metric-content">
+                <p class="metric-label">AI Accuracy</p>
+                <p class="metric-value">{{ ai_accuracy|default:0 }}%</p>
+                <p class="metric-badge">Based on {{ verified_count|default:0 }} verified</p>
+            </div>
+        </div>
+
+        <!-- Avg Confidence Card -->
+        <div class="metric-card metric-card-purple">
+            <svg class="metric-icon-bg" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z"></path>
+            </svg>
+            <div class="metric-content">
+                <p class="metric-label">Avg Confidence</p>
+                <p class="metric-value">{{ avg_confidence|default:0 }}%</p>
+                <p class="metric-badge">AI prediction confidence</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-grid">
+        <!-- Activity Chart -->
+        <div class="chart-card chart-activity">
+            <div class="chart-header">
+                <h2 class="chart-title">
+                    <span class="chart-icon-wrapper">
+                        <svg class="chart-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </span>
+                    Daily Activity
+                </h2>
+                <span class="chart-meta">Last 7 days</span>
+            </div>
+            <div>
+                {% for day in daily_stats %}
+                <div class="activity-row">
+                    <span class="activity-date">{{ day.date|date:"M d" }}</span>
+                    <div class="activity-bar-container">
+                        <div class="activity-bar-bg">
+                            {% with max_count=daily_stats.0.count %}
+                            {% with percentage=day.count|multiply:100|divide:max_count|default:0 %}
+                            <div class="activity-bar" style="width: {{ percentage }}%"></div>
+                            {% endwith %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <span class="activity-count">{{ day.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Status Distribution -->
+        <div class="chart-card chart-status">
+            <div class="chart-header">
+                <h2 class="chart-title">
+                    <span class="chart-icon-wrapper chart-icon-wrapper-green">
+                        <svg class="chart-icon chart-icon-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path>
+                        </svg>
+                    </span>
+                    Status
+                </h2>
+            </div>
+            <div>
+                {% for status in status_distribution %}
+                <div class="status-item">
+                    <div class="status-header">
+                        <span class="status-label">{{ status.status }}</span>
+                        <span class="status-value">{{ status.count }}</span>
+                    </div>
+                    <div class="status-bar-bg">
+                        {% with percentage=status.count|multiply:100|divide:total_identifications|default:0 %}
+                        <div class="status-bar" style="width: {{ percentage }}%; background-color: {{ status.color }}"></div>
+                        {% endwith %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Species Table -->
+    <div class="table-card">
+        <div class="table-header">
+            <h2 class="table-title">
+                <span class="table-icon-wrapper">
+                    <svg class="table-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                    </svg>
+                    </svg>
+                </span>
+                Top Identified Species
+            </h2>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Scientific Name</th>
+                    <th>Indonesian Name</th>
+                    <th>Count</th>
+                    <th>Accuracy</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for species in top_species %}
+                <tr>
+                    <td>
+                        <span class="rank-badge">{{ forloop.counter }}</span>
+                    </td>
+                    <td>
+                        <div class="species-name">{{ species.scientific_name }}</div>
+                    </td>
+                    <td>
+                        <div class="species-local">{{ species.indonesian_name|default:"-" }}</div>
+                    </td>
+                    <td>
+                        <span class="count-badge">{{ species.total_identifications }}</span>
+                    </td>
+                    <td>
+                        {% with accuracy=species.correct_identifications|multiply:100|divide:species.total_identifications|default:0 %}
+                        <div class="accuracy-cell">
+                            <div class="accuracy-bar-container">
+                                <div class="accuracy-bar" style="width: {{ accuracy }}%"></div>
+                            </div>
+                            <span class="accuracy-text">{{ accuracy|floatformat:0 }}%</span>
+                        </div>
+                        {% endwith %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">
+                        <div class="empty-state">
+                            <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                            </svg>
+                            <p class="empty-title">No species data available yet</p>
+                            <p class="empty-subtitle">Start identifying fish to see statistics here</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="actions-grid">
+        <a href="/admin/recognition/fishidentification/?status__exact=pending" class="action-card action-card-orange">
+            <svg class="action-icon-bg" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+            </svg>
+            <div class="action-content">
+                <div class="action-info">
+                    <p class="action-value">{{ pending_review }}</p>
+                    <p class="action-label">Pending Review</p>
+                </div>
+                <svg class="action-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </div>
+        </a>
+
+        <a href="/admin/recognition/fishidentification/?is_corrected__exact=1" class="action-card action-card-blue">
+            <svg class="action-icon-bg" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path>
+            </svg>
+            <div class="action-content">
+                <div class="action-info">
+                    <p class="action-value">{{ corrected_count }}</p>
+                    <p class="action-label">Corrected Items</p>
+                </div>
+                <svg class="action-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </div>
+        </a>
+
+        <a href="/admin/recognition/fishspeciesstatistics/" class="action-card action-card-green">
+            <svg class="action-icon-bg" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path>
+            </svg>
+            <div class="action-content">
+                <div class="action-info">
+                    <p class="action-value">Analytics</p>
+                    <p class="action-label">View Statistics</p>
+                </div>
+                <svg class="action-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </div>
+        </a>
+    </div>
+</div>
+{% endblock %}

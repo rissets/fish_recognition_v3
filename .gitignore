@@ -341,3 +341,13 @@ backups/*
 *.pt.bak*
 .git-backup
 *.bak
+fish_api/staticfiles/*
+!.gitkeep
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+fish_api/staticfiles/
+/fish_api/staticfiles/*
+!fish_api/staticfiles/

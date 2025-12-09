@@ -39,6 +39,7 @@ class FishRecognitionApp {
         };
         
         this.currentMode = 'image';
+        this.currentCorrectionId = null; // Store current identification ID for correction
         this.settings = {
             includeFaces: true,
             includeSegmentation: true,
@@ -329,6 +330,29 @@ class FishRecognitionApp {
         document.getElementById('helpModal').addEventListener('click', (e) => {
             if (e.target.id === 'helpModal') this.hideHelp();
         });
+        
+        // Correction modal
+        document.getElementById('closeCorrectionBtn').addEventListener('click', this.hideCorrectionModal.bind(this));
+        document.getElementById('cancelCorrectionBtn').addEventListener('click', this.hideCorrectionModal.bind(this));
+        document.getElementById('correctionModal').addEventListener('click', (e) => {
+            if (e.target.id === 'correctionModal') this.hideCorrectionModal();
+        });
+        document.getElementById('correctionForm').addEventListener('submit', this.submitCorrection.bind(this));
+        
+        // Test correction button
+        const testCorrectionBtn = document.getElementById('testCorrectionBtn');
+        if (testCorrectionBtn) {
+            testCorrectionBtn.addEventListener('click', () => {
+                // Open modal with test data (no real ID, just for UI testing)
+                console.log('Test correction button clicked - opening modal for UI test only');
+                this.showCorrectionModal(null, {
+                    scientific_name: 'Katsuwonus pelamis',
+                    indonesian_name: 'Ikan Cakalang',
+                    english_name: 'Skipjack Tuna',
+                    kelompok: 'Ikan Laut'
+                });
+            });
+        }
     }
     
     switchMode(mode) {
@@ -535,11 +559,25 @@ class FishRecognitionApp {
                     processing_time: message.data.processing_time,
                     timestamp: message.data.timestamp,
                     total_processing_time: message.data.results.total_processing_time || message.data.processing_time,
-                    source: message.data.source || 'stream'
+                    source: message.data.source || 'stream',
+                    // IMPORTANT: Include identification data for correction feature
+                    identification_id: message.data.results.identification_id,
+                    correction_url: message.data.results.correction_url,
+                    correction_data: message.data.results.correction_data
                 };
                 if (message.data.batch) {
                     resultData.batch_summary = message.data.batch;
                 }
+                
+                // DEBUG: Log the extracted data
+                console.log('=== WEBSOCKET RECOGNITION RESULT ===');
+                console.log('Original message.data.results:', message.data.results);
+                console.log('Extracted resultData:', resultData);
+                console.log('Has identification_id:', !!resultData.identification_id);
+                console.log('identification_id value:', resultData.identification_id);
+                console.log('Has correction_data:', !!resultData.correction_data);
+                console.log('=== END WEBSOCKET DEBUG ===');
+                
                 this.handleRecognitionResult(resultData);
                 this.updateStats(resultData);
                 if (message.data.source === 'capture') {
@@ -1534,9 +1572,13 @@ class FishRecognitionApp {
     handleRecognitionResult(result, title = null) {
         this.isRecognitionProcessing = false;
         
-        // DEBUG: Log visualization handling
+        // DEBUG: Log EVERYTHING
         console.log('=== HANDLE RECOGNITION RESULT DEBUG ===');
-        console.log('Result object:', result);
+        console.log('Full result (stringified):', JSON.stringify(result, null, 2));
+        console.log('Result keys:', Object.keys(result));
+        console.log('identification_id:', result.identification_id);
+        console.log('correction_url:', result.correction_url);
+        console.log('correction_data:', result.correction_data);
         console.log('Has visualization_image:', !!result.visualization_image);
         if (result.visualization_image) {
             console.log('Visualization image data length:', result.visualization_image.length);
@@ -1578,6 +1620,11 @@ class FishRecognitionApp {
         const div = document.createElement('div');
         div.className = 'result-card bg-gray-50 p-4 rounded-lg border';
         
+        // Store identification ID if available
+        if (result.identification_id) {
+            div.setAttribute('data-identification-id', result.identification_id);
+        }
+        
         const fishCount = result.fish_detections?.length || 0;
         const faceCount = result.faces?.length || 0;
         const processingTime = result.total_processing_time || result.processing_time?.total || 0;
@@ -1588,15 +1635,41 @@ class FishRecognitionApp {
         if (result.fish_detections && result.fish_detections.length > 0) {
             fishDetails = result.fish_detections.map((fish, i) => {
                 const classification = fish.classification?.[0];
+                const llmVerification = fish.llm_verification;
+                
+                // DEBUG: Log the fish data structure
+                console.log(`=== FISH ${i + 1} DATA STRUCTURE ===`);
+                console.log('Full fish object:', fish);
+                console.log('Classification:', classification);
+                console.log('LLM Verification:', llmVerification);
+                
+                let detailsHtml = `<div class="text-xs bg-white p-2 rounded mt-2">
+                    <strong>Fish ${i + 1}:</strong>`;
+                
                 if (classification) {
-                    return `
-                        <div class="text-xs bg-white p-2 rounded mt-2">
-                            <strong>Fish ${i + 1}:</strong> ${classification.name}<br>
-                            <span class="text-gray-600">Accuracy: ${(classification.accuracy * 100).toFixed(1)}%</span>
-                        </div>
-                    `;
+                    detailsHtml += ` <span class="species-name">${classification.name}</span><br>
+                        <span class="text-gray-600">Accuracy: ${(classification.accuracy * 100).toFixed(1)}%</span>`;
                 }
-                return `<div class="text-xs bg-white p-2 rounded mt-2"><strong>Fish ${i + 1}:</strong> Detected</div>`;
+                
+                // Add LLM verification if available
+                if (llmVerification && !llmVerification.error) {
+                    detailsHtml += `<br>
+                        <div class="mt-1 pt-1 border-t border-gray-200">
+                            <span class="text-purple-600 font-semibold">🤖 LLM Verification:</span><br>
+                            <span class="text-gray-700 scientific-name">Scientific: ${llmVerification.scientific_name}</span><br>
+                            <span class="text-gray-700">Indonesian: ${llmVerification.indonesian_name}</span><br>
+                            <span class="text-gray-500 text-[10px]">LLM Time: ${llmVerification.processing_time?.toFixed(2) || 'N/A'}s</span>
+                        </div>`;
+                } else if (llmVerification && llmVerification.error) {
+                    detailsHtml += `<br>
+                        <div class="mt-1 pt-1 border-t border-gray-200">
+                            <span class="text-red-600 text-[10px]">LLM Error: ${llmVerification.error}</span>
+                        </div>`;
+                }
+                
+                detailsHtml += `</div>`;
+                
+                return detailsHtml;
             }).join('');
         }
         
@@ -1664,6 +1737,113 @@ class FishRecognitionApp {
             ${aggregateSection}
             ${batchMetaSection}
         `;
+        
+        // DEBUG: Log identification_id
+        console.log('=== CREATE RESULT CARD DEBUG ===');
+        console.log('Result object:', result);
+        console.log('Has identification_id:', !!result.identification_id);
+        console.log('identification_id value:', result.identification_id);
+        console.log('Has fish_detections:', !!result.fish_detections);
+        console.log('Fish count:', result.fish_detections?.length || 0);
+        
+        // Add correction button if identification_id exists and we have fish detections
+        if (result.identification_id && result.fish_detections && result.fish_detections.length > 0) {
+            console.log('✅ Adding correction button');
+            const fish = result.fish_detections[0];
+            const classification = fish.classification?.[0];
+            const llmVerification = fish.llm_verification;
+            
+            console.log('=== CORRECTION BUTTON DATA EXTRACTION ===');
+            console.log('Fish object:', fish);
+            console.log('Classification object:', classification);
+            console.log('LLM Verification object:', llmVerification);
+            console.log('Backend correction_data:', result.correction_data);
+            console.log('Backend correction_url:', result.correction_url);
+            
+            // Get current data for pre-filling the correction form
+            let currentData;
+            
+            // PRIORITY 1: Use correction_data from backend if available (most reliable)
+            if (result.correction_data) {
+                console.log('✅ Using correction_data from backend (most reliable)');
+                currentData = {
+                    scientific_name: result.correction_data.scientific_name || '',
+                    indonesian_name: result.correction_data.indonesian_name || '',
+                    english_name: result.correction_data.english_name || '',
+                    kelompok: result.correction_data.kelompok || ''
+                };
+                console.log('Backend correction data:', currentData);
+            } else {
+                // PRIORITY 2: Construct from classification data (what's displayed in UI)
+                console.log('⚠️ No correction_data from backend, constructing from classification');
+                currentData = {
+                    scientific_name: '',
+                    indonesian_name: '',
+                    english_name: '',
+                    kelompok: ''
+                };
+                
+                // Get data from classification (this is what user sees in the UI)
+                if (classification) {
+                    console.log('Using classification data (what user sees)');
+                    console.log('Classification fields:', Object.keys(classification));
+                    
+                    // Get the name that's displayed in the UI
+                    currentData.indonesian_name = classification.name || classification.indonesian_name || classification.species_name || '';
+                    currentData.scientific_name = classification.scientific_name || classification.species || '';
+                    currentData.english_name = classification.english_name || classification.common_name || '';
+                    currentData.kelompok = classification.kelompok || classification.category || '';
+                    
+                    console.log('Classification data extracted:', currentData);
+                }
+                
+                // Supplement with LLM verification if classification lacks data
+                if (llmVerification && !llmVerification.error) {
+                    console.log('📝 Supplementing with LLM verification data');
+                    
+                    if (!currentData.scientific_name && llmVerification.scientific_name) {
+                        currentData.scientific_name = llmVerification.scientific_name;
+                        console.log('Added scientific name from LLM:', currentData.scientific_name);
+                    }
+                    if (!currentData.english_name && llmVerification.english_name) {
+                        currentData.english_name = llmVerification.english_name;
+                        console.log('Added english name from LLM:', currentData.english_name);
+                    }
+                } else if (llmVerification && llmVerification.error) {
+                    console.log('⚠️ LLM verification has error:', llmVerification.error);
+                } else {
+                    console.log('ℹ️ No LLM verification data available');
+                }
+            }
+            
+            console.log('📋 Final pre-fill data for correction modal:', currentData);
+            
+            const correctionBtn = document.createElement('button');
+            correctionBtn.className = 'mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm font-semibold transition-colors flex items-center justify-center shadow-md';
+            correctionBtn.innerHTML = '🔧 Koreksi Identifikasi Ikan';
+            
+            // Store correction URL in button data attribute if available
+            if (result.correction_url) {
+                correctionBtn.setAttribute('data-correction-url', result.correction_url);
+            }
+            
+            correctionBtn.addEventListener('click', () => {
+                console.log('🖱️ Correction button clicked!');
+                console.log('Identification ID:', result.identification_id);
+                console.log('Correction URL:', result.correction_url);
+                console.log('Data to pass to modal:', currentData);
+                this.showCorrectionModal(result.identification_id, currentData, result.correction_url);
+            });
+            
+            div.appendChild(correctionBtn);
+            console.log('✅ Correction button added to card');
+        } else {
+            console.log('❌ Correction button NOT added:', {
+                hasId: !!result.identification_id,
+                hasFish: !!result.fish_detections,
+                fishCount: result.fish_detections?.length || 0
+            });
+        }
         
         return div;
     }
@@ -1897,6 +2077,245 @@ class FishRecognitionApp {
     
     hideHelp() {
         document.getElementById('helpModal').classList.add('hidden');
+    }
+    
+    showCorrectionModal(identificationId, currentData, correctionUrl = null) {
+        console.log('=== SHOW CORRECTION MODAL ===');
+        console.log('Identification ID:', identificationId);
+        console.log('Current Data received:', currentData);
+        console.log('Correction URL:', correctionUrl);
+        
+        this.currentCorrectionId = identificationId;
+        this.currentCorrectionUrl = correctionUrl; // Store for later use in submit
+        
+        // Pre-fill form with current data
+        const scientificInput = document.getElementById('correctScientificName');
+        const indonesianInput = document.getElementById('correctIndonesianName');
+        const englishInput = document.getElementById('correctEnglishName');
+        const kelompokInput = document.getElementById('correctKelompok');
+        const notesInput = document.getElementById('correctNotes');
+        
+        if (scientificInput) {
+            scientificInput.value = currentData.scientific_name || '';
+            console.log('Set scientific name:', scientificInput.value);
+        }
+        if (indonesianInput) {
+            indonesianInput.value = currentData.indonesian_name || '';
+            console.log('Set indonesian name:', indonesianInput.value);
+        }
+        if (englishInput) {
+            englishInput.value = currentData.english_name || '';
+            console.log('Set english name:', englishInput.value);
+        }
+        if (kelompokInput) {
+            kelompokInput.value = currentData.kelompok || '';
+            console.log('Set kelompok:', kelompokInput.value);
+        }
+        if (notesInput) {
+            notesInput.value = '';
+        }
+        
+        // Clear status
+        const statusEl = document.getElementById('correctionStatus');
+        if (statusEl) {
+            statusEl.classList.add('hidden');
+            statusEl.textContent = '';
+        }
+        
+        // Show modal
+        const modal = document.getElementById('correctionModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            console.log('✅ Modal displayed');
+        } else {
+            console.error('❌ Modal element not found');
+        }
+    }
+    
+    hideCorrectionModal() {
+        document.getElementById('correctionModal').classList.add('hidden');
+        this.currentCorrectionId = null;
+        document.getElementById('correctionForm').reset();
+    }
+    
+    async submitCorrection(event) {
+        event.preventDefault();
+        
+        if (!this.currentCorrectionId) {
+            this.showCorrectionStatus('Mode test - tidak ada identification ID untuk disimpan', 'error');
+            this.showNotification('Ini mode test saja. Gunakan tombol koreksi di result card untuk koreksi yang sebenarnya.', 'error');
+            return;
+        }
+        
+        const correctionData = {
+            scientific_name: document.getElementById('correctScientificName').value.trim(),
+            indonesian_name: document.getElementById('correctIndonesianName').value.trim(),
+            english_name: document.getElementById('correctEnglishName').value.trim() || null,
+            kelompok: document.getElementById('correctKelompok').value.trim() || null,
+            notes: document.getElementById('correctNotes').value.trim() || null
+        };
+        
+        if (!correctionData.scientific_name || !correctionData.indonesian_name) {
+            this.showCorrectionStatus('Nama ilmiah dan nama Indonesia harus diisi', 'error');
+            return;
+        }
+        
+        this.setCorrectionLoading(true);
+        
+        try {
+            // Use stored correction URL if available, otherwise construct it
+            const url = this.currentCorrectionUrl || `${this.apiBase}/identifications/${this.currentCorrectionId}/correct/`;
+            console.log('Submitting correction to URL:', url);
+            console.log('Correction data:', correctionData);
+            
+            // Get CSRF token from cookies
+            function getCookie(name) {
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            
+            const csrftoken = getCookie('csrftoken');
+            
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            
+            if (csrftoken) {
+                headers['X-CSRFToken'] = csrftoken;
+            }
+            
+            console.log('Request headers:', headers);
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(correctionData)
+            });
+            
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            
+            // Clone response before reading to avoid "body stream already read" error
+            const responseClone = response.clone();
+            
+            let result;
+            let responseText;
+            
+            try {
+                // Try to parse as JSON first
+                result = await response.json();
+                console.log('Response data:', result);
+            } catch (jsonError) {
+                console.error('Failed to parse JSON response:', jsonError);
+                // If JSON parsing fails, try to get text from cloned response
+                try {
+                    responseText = await responseClone.text();
+                    console.error('Response text:', responseText);
+                } catch (textError) {
+                    console.error('Failed to get text from response:', textError);
+                }
+                throw new Error('Invalid JSON response from server: ' + (responseText || 'Could not read response'));
+            }
+            
+            if (!response.ok) {
+                console.error('Response not ok:', result);
+                const errorMsg = result.error || result.detail || result.message || JSON.stringify(result) || 'Failed to submit correction';
+                throw new Error(errorMsg);
+            }
+            
+            this.showCorrectionStatus('Koreksi berhasil disimpan!', 'success');
+            this.showNotification('Identifikasi berhasil dikoreksi', 'success');
+            
+            // Update the result card in the UI
+            this.updateResultCardAfterCorrection(this.currentCorrectionId, result);
+            
+            // Close modal after 1.5 seconds
+            setTimeout(() => {
+                this.hideCorrectionModal();
+            }, 1500);
+            
+        } catch (error) {
+            console.error('=== CORRECTION ERROR ===');
+            console.error('Error object:', error);
+            console.error('Error message:', error.message);
+            console.error('Error stack:', error.stack);
+            this.showCorrectionStatus(`Error: ${error.message}`, 'error');
+            this.showNotification('Gagal menyimpan koreksi: ' + error.message, 'error');
+        } finally {
+            this.setCorrectionLoading(false);
+        }
+    }
+    
+    setCorrectionLoading(loading) {
+        const submitText = document.getElementById('correctionSubmitText');
+        const spinner = document.getElementById('correctionSpinner');
+        const submitBtn = document.querySelector('#correctionForm button[type=\"submit\"]');
+        
+        if (loading) {
+            submitText.textContent = 'Menyimpan...';
+            spinner.classList.remove('hidden');
+            submitBtn.disabled = true;
+        } else {
+            submitText.textContent = 'Simpan Koreksi';
+            spinner.classList.add('hidden');
+            submitBtn.disabled = false;
+        }
+    }
+    
+    showCorrectionStatus(message, type = 'info') {
+        const statusEl = document.getElementById('correctionStatus');
+        statusEl.classList.remove('hidden', 'text-gray-600', 'text-green-600', 'text-red-600', 'text-blue-600');
+        
+        if (type === 'success') {
+            statusEl.classList.add('text-green-600');
+        } else if (type === 'error') {
+            statusEl.classList.add('text-red-600');
+        } else {
+            statusEl.classList.add('text-blue-600');
+        }
+        
+        statusEl.textContent = message;
+    }
+    
+    updateResultCardAfterCorrection(identificationId, correctionResult) {
+        // Find and update the result card in the UI
+        const resultsContainer = document.getElementById('resultsContainer');
+        const cards = resultsContainer.querySelectorAll('.result-card');
+        
+        cards.forEach(card => {
+            const cardIdAttr = card.getAttribute('data-identification-id');
+            if (cardIdAttr === identificationId) {
+                // Update the species name display
+                const speciesNameEl = card.querySelector('.species-name');
+                if (speciesNameEl) {
+                    speciesNameEl.textContent = correctionResult.current_indonesian_name;
+                }
+                
+                const scientificNameEl = card.querySelector('.scientific-name');
+                if (scientificNameEl) {
+                    scientificNameEl.textContent = correctionResult.current_scientific_name;
+                }
+                
+                // Add corrected badge
+                const headerDiv = card.querySelector('.flex.items-center.justify-between');
+                if (headerDiv && !card.querySelector('.corrected-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'corrected-badge text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded ml-2';
+                    badge.textContent = '✓ Dikoreksi';
+                    headerDiv.appendChild(badge);
+                }
+            }
+        });
     }
     
     updateUI() {

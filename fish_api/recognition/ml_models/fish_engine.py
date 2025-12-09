@@ -684,6 +684,8 @@ class FishRecognitionEngine:
                             fish_result["llm_verification"] = {
                                 "scientific_name": llm_result["scientific_name"],
                                 "indonesian_name": llm_result["indonesian_name"],
+                                "english_name": llm_result.get("english_name"),
+                                "kelompok": llm_result.get("kelompok"),
                                 "processing_time": time.time() - llm_start,
                                 "raw_response": llm_result.get("llm_raw_response", "")
                             }
@@ -693,12 +695,15 @@ class FishRecognitionEngine:
                             fish_result["classification"].insert(0, {
                                 "name": llm_result["indonesian_name"],
                                 "scientific_name": llm_result["scientific_name"],
+                                "indonesian_name": llm_result["indonesian_name"],
+                                "english_name": llm_result.get("english_name"),
+                                "kelompok": llm_result.get("kelompok"),
                                 "accuracy": 0.95,  # High confidence for LLM result
                                 "source": "llm",
                                 "species_id": -1  # Special ID untuk LLM result
                             })
                             
-                            logger.info(f"LLM identified fish {i}: {llm_result['indonesian_name']} ({llm_result['scientific_name']})")
+                            logger.info(f"LLM identified fish {i}: {llm_result['indonesian_name']} ({llm_result['scientific_name']}) - kelompok: {llm_result.get('kelompok', 'N/A')}")
                         else:
                             fish_result["llm_verification"] = None
                             logger.warning(f"LLM verification failed for fish {i}, using model prediction")

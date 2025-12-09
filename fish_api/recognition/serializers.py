@@ -88,6 +88,11 @@ class RecognitionResultSerializer(serializers.Serializer):
     total_processing_time = serializers.FloatField()
     visualization_image = serializers.CharField(required=False, allow_null=True)
     quality_validation = serializers.DictField(required=False)
+    
+    # Identification and correction fields
+    identification_id = serializers.UUIDField(required=False, allow_null=True)
+    correction_url = serializers.CharField(required=False, allow_null=True)
+    correction_data = serializers.DictField(required=False, allow_null=True)
 
 
 class BatchRecognitionResultSerializer(serializers.Serializer):
@@ -187,3 +192,145 @@ class LWFAdaptationSerializer(serializers.Serializer):
         if not images and not images_b64:
             raise serializers.ValidationError("Provide at least one image via 'images' or 'images_base64'")
         return attrs
+
+
+# ============================================================================
+# Fish Identification Serializers
+# ============================================================================
+
+class FishIdentificationSerializer(serializers.ModelSerializer):
+    """Serializer for FishIdentification model"""
+    
+    was_ai_correct = serializers.BooleanField(read_only=True)
+    image_url = serializers.URLField(read_only=True)
+    
+    class Meta:
+        model = 'recognition.FishIdentification'
+        fields = [
+            'id',
+            'image', 
+            'image_url',
+            'thumbnail',
+            'original_scientific_name',
+            'original_indonesian_name',
+            'original_english_name',
+            'original_kelompok',
+            'current_scientific_name',
+            'current_indonesian_name',
+            'current_english_name',
+            'current_kelompok',
+            'confidence_score',
+            'ai_model_version',
+            'detection_box',
+            'detection_score',
+            'kb_candidates',
+            'status',
+            'is_corrected',
+            'correction_notes',
+            'user_identifier',
+            'user_location',
+            'created_at',
+            'updated_at',
+            'corrected_at',
+            'was_ai_correct',
+        ]
+        read_only_fields = [
+            'id',
+            'image_url',
+            'created_at',
+            'updated_at',
+            'was_ai_correct',
+        ]
+
+
+class FishIdentificationListSerializer(serializers.ModelSerializer):
+    """Simplified serializer for list views"""
+    
+    was_ai_correct = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = 'recognition.FishIdentification'
+        fields = [
+            'id',
+            'image_url',
+            'current_indonesian_name',
+            'current_scientific_name',
+            'original_indonesian_name',
+            'confidence_score',
+            'status',
+            'is_corrected',
+            'created_at',
+            'was_ai_correct',
+        ]
+
+
+class FishIdentificationCorrectionSerializer(serializers.Serializer):
+    """Serializer for correcting fish identification"""
+    
+    scientific_name = serializers.CharField(max_length=255)
+    indonesian_name = serializers.CharField(max_length=255)
+    english_name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    kelompok = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    
+    def validate_scientific_name(self, value):
+        """Validate scientific name is not empty"""
+        if not value.strip():
+            raise serializers.ValidationError("Scientific name cannot be empty")
+        return value.strip()
+    
+    def validate_indonesian_name(self, value):
+        """Validate Indonesian name is not empty"""
+        if not value.strip():
+            raise serializers.ValidationError("Indonesian name cannot be empty")
+        return value.strip()
+
+
+class FishIdentificationStatusSerializer(serializers.Serializer):
+    """Serializer for updating status"""
+    
+    status = serializers.ChoiceField(choices=['pending', 'verified', 'corrected', 'rejected'])
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class FishIdentificationHistorySerializer(serializers.ModelSerializer):
+    """Serializer for identification history"""
+    
+    class Meta:
+        model = 'recognition.FishIdentificationHistory'
+        fields = [
+            'id',
+            'identification',
+            'field_name',
+            'old_value',
+            'new_value',
+            'changed_by',
+            'changed_at',
+            'change_reason',
+        ]
+        read_only_fields = ['id', 'changed_at']
+
+
+class FishSpeciesStatisticsSerializer(serializers.ModelSerializer):
+    """Serializer for species statistics"""
+    
+    accuracy_rate = serializers.FloatField(read_only=True)
+    
+    class Meta:
+        model = 'recognition.FishSpeciesStatistics'
+        fields = [
+            'id',
+            'scientific_name',
+            'indonesian_name',
+            'english_name',
+            'kelompok',
+            'total_identifications',
+            'correct_identifications',
+            'corrected_identifications',
+            'average_confidence',
+            'accuracy_rate',
+            'first_seen',
+            'last_seen',
+        ]
+        read_only_fields = ['id', 'first_seen', 'last_seen', 'accuracy_rate']
+        read_only_fields = ['id', 'first_seen', 'last_seen', 'accuracy_rate']

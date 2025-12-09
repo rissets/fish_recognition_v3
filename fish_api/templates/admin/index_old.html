@@ -1,0 +1,250 @@
+{% extends "unfold/layouts/base_simple.html" %}
+{% load i18n unfold %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="px-6 py-8">
+    <h1 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white">
+        {% trans "Fish Recognition Dashboard" %}
+    </h1>
+    
+    <!-- Key Metrics Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Total Identifications -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        {% trans "Total Identifications" %}
+                    </p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+                        {{ total_identifications|default:0 }}
+                    </p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        <span class="text-blue-600 dark:text-blue-400">+{{ recent_identifications|default:0 }}</span> 
+                        {% trans "last 7 days" %}
+                    </p>
+                </div>
+                <div class="bg-blue-100 dark:bg-blue-900 rounded-full p-3">
+                    <svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pending Review -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        {% trans "Pending Review" %}
+                    </p>
+                    <p class="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-2">
+                        {{ pending_review|default:0 }}
+                    </p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        {% trans "Requires attention" %}
+                    </p>
+                </div>
+                <div class="bg-orange-100 dark:bg-orange-900 rounded-full p-3">
+                    <svg class="w-8 h-8 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AI Accuracy -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        {% trans "AI Accuracy" %}
+                    </p>
+                    <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">
+                        {{ ai_accuracy|default:0 }}%
+                    </p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        {% trans "Verified identifications" %}
+                    </p>
+                </div>
+                <div class="bg-green-100 dark:bg-green-900 rounded-full p-3">
+                    <svg class="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Avg Confidence -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        {% trans "Avg Confidence" %}
+                    </p>
+                    <p class="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-2">
+                        {{ avg_confidence|default:0 }}%
+                    </p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        {% trans "All identifications" %}
+                    </p>
+                </div>
+                <div class="bg-purple-100 dark:bg-purple-900 rounded-full p-3">
+                    <svg class="w-8 h-8 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Status Distribution -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+                {% trans "Status Distribution" %}
+            </h2>
+            <div class="space-y-4">
+                {% for status in status_distribution %}
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ status.status }}</span>
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ status.count }}</span>
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div class="h-2 rounded-full" 
+                             style="width: {% if total_identifications > 0 %}{{ status.count|floatformat:0|add:'0'|multiply:100|divide:total_identifications }}{% else %}0{% endif %}%; background-color: {{ status.color }};">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+                {% trans "7-Day Activity" %}
+            </h2>
+            <div class="space-y-3">
+                {% for day in daily_stats %}
+                <div class="flex items-center">
+                    <span class="text-sm text-gray-600 dark:text-gray-400 w-28">{{ day.date }}</span>
+                    <div class="flex-1 mx-3">
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-blue-600 dark:bg-blue-400 h-2 rounded-full" 
+                                 style="width: {% if day.count > 0 %}{{ day.count|multiply:10 }}%{% else %}2%{% endif %};">
+                            </div>
+                        </div>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900 dark:text-white w-12 text-right">{{ day.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Top Species Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            {% trans "Top Species" %}
+        </h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            {% trans "Scientific Name" %}
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            {% trans "Common Name" %}
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            {% trans "Total" %}
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            {% trans "Correct" %}
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            {% trans "Accuracy" %}
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            {% trans "Avg Confidence" %}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for species in top_species %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                            {{ species.scientific_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {{ species.common_name|default:"-" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                            {{ species.total_identifications }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400">
+                            {{ species.correct_identifications }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            {% with accuracy=species.correct_identifications|multiply:100|divide:species.total_identifications %}
+                            <span class="{% if accuracy >= 80 %}text-green-600{% elif accuracy >= 60 %}text-orange-600{% else %}text-red-600{% endif %}">
+                                {{ accuracy|floatformat:1 }}%
+                            </span>
+                            {% endwith %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                            {{ species.average_confidence|multiply:100|floatformat:1 }}%
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                            {% trans "No data available" %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <a href="{% url 'admin:recognition_fishidentification_changelist' %}?status__exact=pending" 
+           class="block bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-lg transition">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {% trans "Review Pending" %}
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                {% trans "Review and verify pending identifications" %}
+            </p>
+        </a>
+        
+        <a href="{% url 'admin:recognition_fishidentification_changelist' %}" 
+           class="block bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-lg transition">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {% trans "All Identifications" %}
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                {% trans "View all fish identifications" %}
+            </p>
+        </a>
+        
+        <a href="{% url 'admin:recognition_fishspeciesstatistics_changelist' %}" 
+           class="block bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-lg transition">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {% trans "Species Statistics" %}
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                {% trans "View detailed species statistics" %}
+            </p>
+        </a>
+    </div>
+</div>
+{% endblock %}

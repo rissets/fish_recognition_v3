@@ -457,18 +457,27 @@ CRITICAL RULES:
                     scientific_name = parsed_output["scientific_name"]
                     indonesian_name = parsed_output["indonesian_name"]
                     
-                    # Validate with knowledge base
+                    # Validate with knowledge base and get additional data
                     kb_species = self.kb_service.get_species_by_scientific_name(scientific_name)
+                    
+                    result = {
+                        "scientific_name": scientific_name,
+                        "indonesian_name": indonesian_name,
+                        "english_name": None,
+                        "kelompok": None
+                    }
+                    
                     if kb_species:
                         logger.info(f"✓ LLM verification successful and validated with KB: {scientific_name} / {indonesian_name}")
                         logger.info(f"  KB match: {kb_species.get('species_indonesia', '')} - kelompok: {kb_species.get('kelompok', '')}")
+                        
+                        # Add KB data to result
+                        result["english_name"] = kb_species.get('english_name')
+                        result["kelompok"] = kb_species.get('kelompok')
                     else:
                         logger.info(f"✓ LLM verification successful (not found in KB): {scientific_name} / {indonesian_name}")
                     
-                    return {
-                        "scientific_name": scientific_name,
-                        "indonesian_name": indonesian_name
-                    }
+                    return result
                 else:
                     logger.warning(f"✗ LLM response missing required fields. Got keys: {list(parsed_output.keys())}")
                     return None

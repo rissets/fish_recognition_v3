@@ -47,6 +47,9 @@ ALLOWED_HOSTS = ['*'] if DEBUG else os.getenv('ALLOWED_HOSTS', '').split(',')
 
 INSTALLED_APPS = [
     'daphne',
+    'unfold',  # Django Unfold must be before django.contrib.admin
+    'unfold.contrib.filters',  # optional, if special filters are needed
+    'unfold.contrib.forms',  # optional, if special form elements are needed
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -65,6 +68,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'fish_recognition_api.middleware.DisableCSRFForAPIMiddleware',  # Custom CSRF exempt for API
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -108,11 +112,29 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
     "https://smart-mancing.hellodigi.id"
 ]
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF settings
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://smart-mancing.hellodigi.id",
+]
+
+# Disable CSRF for API endpoints (they use csrf_exempt decorator)
+# This is needed because middleware checks before decorator
+import re
+CSRF_EXEMPT_URLS = [
+    re.compile(r'^api/'),
+]
 
 
 # Database
@@ -292,3 +314,165 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# Django Unfold Configuration
+from django.utils.translation import gettext_lazy as _
+
+UNFOLD = {
+    "SITE_TITLE": "Fish Recognition",
+    "SITE_HEADER": "Fish Recognition System",
+    "SITE_URL": "/",
+    "SITE_ICON": None,
+    "SITE_LOGO": None,
+    "SITE_SYMBOL": "🐟",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "ENVIRONMENT": "fish_recognition_api.utils.environment_callback",
+    "DASHBOARD_CALLBACK": "fish_recognition_api.utils.dashboard_callback",
+    "THEME": "dark",
+    "COLORS": {
+        "primary": {
+            "50": "220 252 231",
+            "100": "187 247 208",
+            "200": "134 239 172",
+            "300": "74 222 128",
+            "400": "34 197 94",
+            "500": "22 163 74",
+            "600": "21 128 61",
+            "700": "22 101 52",
+            "800": "22 78 42",
+            "900": "20 64 36",
+            "950": "5 30 16",
+        },
+    },
+    "SITE_DROPDOWN": [
+        {
+            "icon": "diamond",
+            "title": _("Home"),
+            "link": lambda request: "/",
+        },
+        # ...
+    ],
+    "EXTENSIONS": {
+        "modeltranslation": {
+            "flags": {
+                "en": "🇬🇧",
+                "fr": "🇫🇷",
+                "nl": "🇳🇱",
+            },
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": _("Navigation"),
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": _("Dashboard"),
+                        "icon": "dashboard",
+                        "link": lambda request: "/admin/",
+                    },
+                ],
+            },
+            {
+                "title": _("Fish Identification"),
+                "separator": True,
+                # "collapsible": True,
+                "items": [
+                    {
+                        "title": _("All Identifications"),
+                        "icon": "visibility",
+                        "link": lambda request: "/admin/recognition/fishidentification/",
+                        "permission": lambda request: request.user.has_perm("recognition.view_fishidentification"),
+                    },
+                    {
+                        "title": _("Pending Review"),
+                        "icon": "pending_actions",
+                        "link": lambda request: "/admin/recognition/fishidentification/?status__exact=pending",
+                        "badge": lambda request: __import__('recognition.models', fromlist=['FishIdentification']).FishIdentification.objects.filter(status='pending').count(),
+                        "permission": lambda request: request.user.has_perm("recognition.view_fishidentification"),
+                    },
+                    {
+                        "title": _("Verified"),
+                        "icon": "verified",
+                        "link": lambda request: "/admin/recognition/fishidentification/?status__exact=verified",
+                        "permission": lambda request: request.user.has_perm("recognition.view_fishidentification"),
+                    },
+                    {
+                        "title": _("Rejected"),
+                        "icon": "cancel",
+                        "link": lambda request: "/admin/recognition/fishidentification/?status__exact=rejected",
+                        "permission": lambda request: request.user.has_perm("recognition.view_fishidentification"),
+                    },
+                ],
+            },
+            {
+                "title": _("Analytics"),
+                "separator": True,
+                # "collapsible": True,
+                "items": [
+                    {
+                        "title": _("History"),
+                        "icon": "history",
+                        "link": lambda request: "/admin/recognition/fishidentificationhistory/",
+                        "permission": lambda request: request.user.has_perm("recognition.view_fishidentificationhistory"),
+                    },
+                    {
+                        "title": _("Species Statistics"),
+                        "icon": "analytics",
+                        "link": lambda request: "/admin/recognition/fishspeciesstatistics/",
+                        "permission": lambda request: request.user.has_perm("recognition.view_fishspeciesstatistics"),
+                    },
+                ],
+            },
+            {
+                "title": _("Administration"),
+                "separator": True,
+                # "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Users"),
+                        "icon": "people",
+                        "link": lambda request: "/admin/auth/user/",
+                        "permission": lambda request: request.user.has_perm("auth.view_user"),
+                    },
+                    {
+                        "title": _("Groups"),
+                        "icon": "group",
+                        "link": lambda request: "/admin/auth/group/",
+                        "permission": lambda request: request.user.has_perm("auth.view_group"),
+                    },
+                ],
+            },
+        ],
+    },
+    "TABS": [
+        {
+            "models": [
+                "recognition.fishidentification",
+            ],
+            "items": [
+                {
+                    "title": _("All"),
+                    "icon": "list",
+                    "link": lambda request: "/admin/recognition/fishidentification/",
+                },
+                {
+                    "title": _("Pending"),
+                    "icon": "pending",
+                    "link": lambda request: "/admin/recognition/fishidentification/?status__exact=pending",
+                },
+                {
+                    "title": _("Verified"),
+                    "icon": "check_circle",
+                    "link": lambda request: "/admin/recognition/fishidentification/?status__exact=verified",
+                },
+            ],
+        },
+    ],
+}
+
