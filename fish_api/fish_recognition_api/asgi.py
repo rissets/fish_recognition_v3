@@ -14,12 +14,15 @@ from django.urls import path
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'fish_recognition_api.settings')
 
-# Import WebSocket consumer
+# Initialize Django ASGI application early to ensure apps are loaded
+django_asgi_app = get_asgi_application()
+
+# NOW import WebSocket consumers after Django is initialized
 from recognition.consumers.recognition_consumer import RecognitionConsumer
 from recognition.consumers.detection_consumer import DetectionConsumer
 
 application = ProtocolTypeRouter({
-    "http": get_asgi_application(),
+    "http": django_asgi_app,
     "websocket": URLRouter([
         path("ws/recognition/", RecognitionConsumer.as_asgi()),
         path("ws/recognition/detection/", DetectionConsumer.as_asgi()),

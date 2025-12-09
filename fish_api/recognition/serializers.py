@@ -5,15 +5,40 @@ Serializers for Fish Recognition API
 from rest_framework import serializers
 from django.core.files.uploadedfile import InMemoryUploadedFile
 import base64
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
 
 
 class ImageUploadSerializer(serializers.Serializer):
-    """Serializer for image upload"""
-    image = serializers.ImageField(required=False)
-    image_base64 = serializers.CharField(required=False, allow_blank=True)
-    include_faces = serializers.BooleanField(default=True, required=False)
-    include_segmentation = serializers.BooleanField(default=True, required=False)
-    include_visualization = serializers.BooleanField(default=False, required=False)
+    """
+    Serializer for single image upload and fish recognition request.
+    
+    Supports both image file upload and base64 encoded image data.
+    """
+    image = serializers.ImageField(
+        required=False,
+        help_text="Image file to analyze (JPG, PNG, or other supported formats). Max size: 10MB"
+    )
+    image_base64 = serializers.CharField(
+        required=False, 
+        allow_blank=True,
+        help_text="Base64 encoded image data as alternative to file upload"
+    )
+    include_faces = serializers.BooleanField(
+        default=True, 
+        required=False,
+        help_text="Whether to detect fish faces in the image"
+    )
+    include_segmentation = serializers.BooleanField(
+        default=True, 
+        required=False,
+        help_text="Whether to generate segmentation masks for detected fish"
+    )
+    include_visualization = serializers.BooleanField(
+        default=False, 
+        required=False,
+        help_text="Whether to return visualization image with detection boxes and labels"
+    )
     
     def validate(self, data):
         """Validate that either image file or base64 is provided"""
@@ -198,6 +223,9 @@ class LWFAdaptationSerializer(serializers.Serializer):
 # Fish Identification Serializers
 # ============================================================================
 
+from .models import FishIdentification, FishIdentificationHistory, FishSpeciesStatistics, FishMasterData
+
+
 class FishIdentificationSerializer(serializers.ModelSerializer):
     """Serializer for FishIdentification model"""
     
@@ -205,7 +233,7 @@ class FishIdentificationSerializer(serializers.ModelSerializer):
     image_url = serializers.URLField(read_only=True)
     
     class Meta:
-        model = 'recognition.FishIdentification'
+        model = FishIdentification
         fields = [
             'id',
             'image', 
@@ -249,7 +277,7 @@ class FishIdentificationListSerializer(serializers.ModelSerializer):
     was_ai_correct = serializers.BooleanField(read_only=True)
     
     class Meta:
-        model = 'recognition.FishIdentification'
+        model = FishIdentification
         fields = [
             'id',
             'image_url',
@@ -297,7 +325,7 @@ class FishIdentificationHistorySerializer(serializers.ModelSerializer):
     """Serializer for identification history"""
     
     class Meta:
-        model = 'recognition.FishIdentificationHistory'
+        model = FishIdentificationHistory
         fields = [
             'id',
             'identification',
@@ -317,7 +345,7 @@ class FishSpeciesStatisticsSerializer(serializers.ModelSerializer):
     accuracy_rate = serializers.FloatField(read_only=True)
     
     class Meta:
-        model = 'recognition.FishSpeciesStatistics'
+        model = FishSpeciesStatistics
         fields = [
             'id',
             'scientific_name',
@@ -342,7 +370,7 @@ class FishMasterDataSerializer(serializers.ModelSerializer):
     daerah_names_list = serializers.ListField(read_only=True)
     
     class Meta:
-        model = 'recognition.FishMasterData'
+        model = FishMasterData
         fields = [
             'id',
             'species_indonesia',

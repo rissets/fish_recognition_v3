@@ -1,0 +1,1790 @@
+openapi: 3.0.3
+info:
+  title: Fish Recognition API
+  version: 1.0.0
+  description: API for fish detection, classification, and recognition using AI models.
+    Supports single and batch image processing with face detection, segmentation,
+    and LLM-powered species verification.
+  contact:
+    name: Fish Recognition API Team
+    email: support@example.com
+  license:
+    name: MIT
+paths:
+  /api/v1/config/:
+    get:
+      operationId: config_retrieve
+      description: Retrieve current AI model configuration settings including thresholds
+        and device.
+      summary: Get current model configuration
+      tags:
+      - Configuration
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+    post:
+      operationId: config_create
+      description: Update AI model configuration settings. Changes apply immediately
+        to subsequent requests.
+      summary: Update model configuration
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelConfigRequest'
+            examples:
+              UpdateThresholds:
+                value:
+                  confidence_threshold: 0.7
+                  nms_threshold: 0.4
+                  segmentation_threshold: 0.6
+                  device: cpu
+                  enable_caching: true
+                summary: Update thresholds
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ModelConfigRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/ModelConfigRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid configuration values
+          description: ''
+  /api/v1/config/face-filter/:
+    get:
+      operationId: config_face_filter_retrieve
+      description: Retrieve current face filter settings for fish detection quality
+        control.
+      summary: Get face filter configuration
+      tags:
+      - Configuration
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaceFilterConfig'
+          description: ''
+    post:
+      operationId: config_face_filter_create
+      description: Configure face detection filtering to improve fish detection quality.
+      summary: Update face filter configuration
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FaceFilterConfigRequest'
+            examples:
+              UpdateFaceFilter:
+                value:
+                  enabled: true
+                  iou_threshold: 0.3
+                summary: Update face filter
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FaceFilterConfigRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/FaceFilterConfigRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+  /api/v1/dataset/export/:
+    get:
+      operationId: dataset_export_retrieve
+      description: "\n    Export fish identification dataset in various formats for\
+        \ model training or analysis.\n    \n    Supports:\n    - JSON format (default)\n\
+        \    - CSV format (for data analysis)\n    - YOLO format (for object detection\
+        \ training)\n    \n    Filters allow exporting specific subsets (verified\
+        \ only, date range, specific species).\n    "
+      summary: Export dataset for training
+      parameters:
+      - in: query
+        name: date_from
+        schema:
+          type: string
+        description: Start date (YYYY-MM-DD)
+      - in: query
+        name: date_to
+        schema:
+          type: string
+        description: End date (YYYY-MM-DD)
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+          - yolo
+          default: json
+        description: Export format
+      - in: query
+        name: kelompok
+        schema:
+          type: string
+        description: Filter by fish group
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filter by status
+      - in: query
+        name: use_corrected
+        schema:
+          type: boolean
+          default: true
+        description: Use corrected names
+      tags:
+      - Dataset
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Dataset exported successfully
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid parameters
+          description: ''
+  /api/v1/dataset/statistics/:
+    get:
+      operationId: dataset_statistics_retrieve
+      description: "\n    Retrieve comprehensive statistics about the fish identification\
+        \ dataset.\n    \n    Includes:\n    - Total identifications and distribution\
+        \ by status\n    - Species distribution and diversity metrics\n    - Temporal\
+        \ patterns (identifications over time)\n    - Quality metrics (confidence\
+        \ scores, correction rates)\n    - User and geographic distribution\n    "
+      summary: Get dataset statistics
+      tags:
+      - Dataset
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Dataset statistics
+                content:
+                  application/json:
+                    example:
+                      total_identifications: 1500
+                      by_status:
+                        verified: 1200
+                        corrected: 250
+                        pending: 50
+                      unique_species: 45
+                      avg_confidence: 0.87
+                      accuracy_rate: 0.83
+                      correction_rate: 0.17
+          description: ''
+  /api/v1/embedding/lwf/:
+    post:
+      operationId: embedding_lwf_create
+      description: "\n    Add new species to the classification model using Learning-Without-Forgetting\
+        \ (LWF) technique.\n    \n    This endpoint allows you to extend the model's\
+        \ knowledge with new fish species\n    without retraining from scratch. Upload\
+        \ images of the new species and the model\n    will adapt its embeddings while\
+        \ preserving existing knowledge.\n    "
+      summary: Adapt model with new species data
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LWFAdaptationRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LWFAdaptationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Adaptation successful
+                examples:
+                  application/json:
+                    species_id: 51
+                    species_name: Ikan Baru
+                    scientific_name: Novus piscis
+                    new_embeddings: 15
+                    total_embeddings: 215
+                    majority_ratio: 0.85
+                    centroid_shift: 0.12
+                    augment_used: true
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid request or no valid images
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Adaptation failed
+          description: ''
+  /api/v1/health/:
+    get:
+      operationId: health_retrieve
+      description: Check the health status of the API and all AI models. Returns model
+        loading status, device information, and processing statistics.
+      summary: Health check endpoint
+      tags:
+      - Health
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+  /api/v1/identifications/:
+    get:
+      operationId: identifications_list
+      description: "\n        Retrieve paginated list of all fish identifications\
+        \ with filtering options.\n        \n        Supports filtering by:\n    \
+        \    - Status (pending, verified, corrected, rejected)\n        - Correction\
+        \ status (is_corrected)\n        - Date range\n        - Species name\n  \
+        \      - User identifier\n        "
+      summary: List all fish identifications
+      parameters:
+      - in: query
+        name: is_corrected
+        schema:
+          type: boolean
+        description: Filter by correction status
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search in species names
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filter by status
+      tags:
+      - Identification
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=4
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=2
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: {}
+                      description: Unspecified response body
+          description: ''
+    post:
+      operationId: identifications_create
+      description: Create new fish identification record (typically used internally
+        after recognition).
+      summary: Create fish identification
+      tags:
+      - Identification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/FishIdentificationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FishIdentification'
+          description: ''
+  /api/v1/identifications/{id}/:
+    get:
+      operationId: identifications_retrieve
+      description: Retrieve detailed information about a specific fish identification
+        including images, AI predictions, and correction history.
+      summary: Get identification details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identification
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                detail: Not found.
+          description: ''
+    put:
+      operationId: identifications_update
+      description: Update fish identification details.
+      summary: Update identification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/FishIdentificationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FishIdentification'
+          description: ''
+    patch:
+      operationId: identifications_partial_update
+      description: Partially update fish identification details.
+      summary: Partially update identification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedFishIdentificationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedFishIdentificationRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/PatchedFishIdentificationRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FishIdentification'
+          description: ''
+    delete:
+      operationId: identifications_destroy
+      description: Delete a fish identification record.
+      summary: Delete identification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identification
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/v1/identifications/{id}/correct/:
+    post:
+      operationId: identifications_correct_create
+      description: "\n    Submit manual correction for AI-identified fish species.\n\
+        \    \n    Use this endpoint when the AI misidentified a fish species. Corrections\
+        \ are tracked\n    and used to improve the model over time. The system maintains\
+        \ both original AI\n    predictions and corrected values for accuracy tracking.\n\
+        \    \n    All corrections are logged in the identification history for audit\
+        \ purposes.\n    "
+      summary: Correct fish identification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Correction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationCorrectionRequest'
+            examples:
+              CorrectSpecies:
+                value:
+                  current_scientific_name: Thunnus alalunga
+                  current_indonesian_name: Tuna Albacore
+                  current_english_name: Albacore Tuna
+                  current_kelompok: Ikan Pelagis
+                  correction_notes: Identified by expert ichthyologist
+                  status: verified
+                summary: Correct species
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationCorrectionRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/FishIdentificationCorrectionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid correction data
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                detail: Not found.
+          description: ''
+  /api/v1/identifications/{id}/history/:
+    get:
+      operationId: identifications_history_list
+      description: Retrieve complete change history for a fish identification including
+        all corrections and status changes.
+      summary: Get identification history
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Identification
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFishIdentificationHistoryList'
+          description: ''
+  /api/v1/identifications/{id}/reject/:
+    post:
+      operationId: identifications_reject_create
+      description: "\n    Mark an identification as rejected.\n    \n    Use this\
+        \ when:\n    - The image does not contain a fish\n    - Image quality is too\
+        \ poor for accurate identification\n    - The detection was a false positive\n\
+        \    "
+      summary: Reject identification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Correction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationStatusRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/FishIdentificationStatusRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Rejection successful
+                type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                detail: Not found.
+          description: ''
+  /api/v1/identifications/{id}/verify/:
+    post:
+      operationId: identifications_verify_create
+      description: "\n    Confirm that the AI correctly identified the fish species.\n\
+        \    \n    Use this endpoint when you've reviewed the AI's identification\
+        \ and confirmed\n    it is accurate. This helps track the model's accuracy\
+        \ and builds confidence\n    in its predictions.\n    "
+      summary: Verify correct identification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Correction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FishIdentificationStatusRequest'
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/FishIdentificationStatusRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Verification successful
+                type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                detail: Not found.
+          description: ''
+  /api/v1/master-data/:
+    get:
+      operationId: master_data_retrieve
+      description: "\n        Retrieve fish species master data from the knowledge\
+        \ base.\n        \n        This endpoint provides the reference database of\
+        \ known fish species\n        with their Indonesian names, scientific names,\
+        \ and characteristics.\n        "
+      summary: List fish master data
+      parameters:
+      - in: query
+        name: jenis_perairan
+        schema:
+          type: string
+        description: Filter by water type
+      - in: query
+        name: kelompok
+        schema:
+          type: string
+        description: Filter by fish group
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Items per page (max 200)
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search in species names
+      tags:
+      - Dataset
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+    post:
+      operationId: master_data_create
+      description: Add new fish species to the master data knowledge base.
+      summary: Create master data entry
+      tags:
+      - Dataset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                description: Master data created successfully
+          description: ''
+  /api/v1/master-data/{id}/:
+    get:
+      operationId: master_data_retrieve_2
+      description: Retrieve detailed information about a specific fish species from
+        master data.
+      summary: Get master data details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Dataset
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                detail: Not found.
+          description: ''
+    put:
+      operationId: master_data_update
+      description: Update fish species information in master data.
+      summary: Update master data
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Dataset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Updated successfully
+          description: ''
+    patch:
+      operationId: master_data_partial_update
+      description: Partial update master data
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - master-data
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: master_data_destroy
+      description: Remove fish species from master data.
+      summary: Delete master data
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Dataset
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/v1/master-data/stats/:
+    get:
+      operationId: master_data_stats_retrieve
+      description: "\n    Retrieve statistics about the fish master data knowledge\
+        \ base.\n    \n    Includes counts by:\n    - Fish groups (kelompok)\n   \
+        \ - Water types (jenis_perairan)\n    - Conservation status\n    - Total species\
+        \ count\n    "
+      summary: Get master data statistics
+      tags:
+      - Dataset
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Master data statistics
+                content:
+                  application/json:
+                    example:
+                      total_species: 150
+                      by_kelompok:
+                        Ikan Pelagis: 45
+                        Ikan Demersal: 38
+                      by_water_type:
+                        Laut: 90
+                        Air Tawar: 45
+                        Air Payau: 15
+                      protected_species: 12
+                      ornamental_species: 28
+          description: ''
+  /api/v1/minio/health/:
+    get:
+      operationId: minio_health_retrieve
+      description: Verify MinIO object storage connectivity and health status.
+      summary: Check MinIO storage health
+      tags:
+      - Health
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: MinIO is healthy
+                type: object
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: MinIO is unavailable or disabled
+          description: ''
+  /api/v1/recognize/:
+    post:
+      operationId: recognize_create
+      description: "\n        Process a single image for fish detection, classification,\
+        \ and recognition.\n        \n        Features:\n        - Detects fish in\
+        \ the image using YOLO model\n        - Classifies detected fish species\n\
+        \        - Performs segmentation for accurate fish boundaries\n        - Detects\
+        \ fish faces for quality assessment\n        - Uses LLM for species verification\
+        \ and knowledge base enrichment\n        - Saves identification to database\
+        \ for tracking and correction\n        \n        The image can be provided\
+        \ as either:\n        - Multipart file upload (`image` field)\n        - Base64\
+        \ encoded string (`image_base64` field)\n        \n        Returns comprehensive\
+        \ detection results including bounding boxes, confidence scores, \n      \
+        \  species classification, and optional visualization.\n        "
+      summary: Recognize fish in single image
+      tags:
+      - Recognition
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImageUploadRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageUploadRequest'
+            examples:
+              FileUploadRequest:
+                value:
+                  image: (binary file)
+                  include_faces: true
+                  include_segmentation: true
+                  include_visualization: false
+                summary: File upload request
+                description: Upload image as multipart form data
+              Base64Request:
+                value:
+                  image_base64: /9j/4AAQSkZJRgABAQAA...
+                  include_faces: true
+                  include_segmentation: true
+                  include_visualization: true
+                summary: Base64 request
+                description: Upload image as base64 string
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/ImageUploadRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        200-no-fish:
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+  /api/v1/recognize/batch/:
+    post:
+      operationId: recognize_batch_create
+      description: "\n        Process multiple images (up to 10) in a single request\
+        \ for fish recognition.\n        \n        Features:\n        - Processes\
+        \ 1-10 images in parallel\n        - Aggregates species detection across all\
+        \ images\n        - Provides voting mechanism for species consensus\n    \
+        \    - Returns individual results for each image plus aggregate summary\n\
+        \        \n        Useful for:\n        - Processing multiple angles of the\
+        \ same fish\n        - Analyzing fish schools or groups\n        - Batch processing\
+        \ of collected images\n        "
+      summary: Batch fish recognition
+      tags:
+      - Recognition
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BatchImageUploadRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchImageUploadRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid request - check image count (1-10) and formats
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Server error during batch processing
+          description: ''
+  /api/v1/species/statistics/:
+    get:
+      operationId: species_statistics_list
+      description: "\n    Retrieve comprehensive statistics for all identified fish\
+        \ species.\n    \n    Includes:\n    - Total identification count per species\n\
+        \    - AI accuracy rate (correct vs corrected)\n    - Average confidence scores\n\
+        \    - First and last seen dates\n    "
+      summary: Get species statistics
+      parameters:
+      - in: query
+        name: kelompok
+        schema:
+          type: string
+        description: Filter by fish group
+      - in: query
+        name: min_identifications
+        schema:
+          type: integer
+        description: Minimum identification count
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search in species names
+      tags:
+      - Identification
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=4
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=2
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: {}
+                      description: Unspecified response body
+          description: ''
+  /api/v1/stats/:
+    get:
+      operationId: stats_retrieve
+      description: Retrieve detailed performance metrics for all model components
+        including average, min, and max processing times.
+      summary: Get performance statistics
+      tags:
+      - Health
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Internal server error
+          description: ''
+components:
+  schemas:
+    BatchImageUploadRequest:
+      type: object
+      description: Serializer for batch image upload
+      properties:
+        images:
+          type: array
+          items:
+            type: string
+            format: binary
+          maxItems: 10
+          minItems: 1
+        images_base64:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          maxItems: 10
+          minItems: 1
+        include_faces:
+          type: boolean
+          default: true
+        include_segmentation:
+          type: boolean
+          default: true
+        include_visualization:
+          type: boolean
+          default: false
+    FaceFilterConfig:
+      type: object
+      description: Serializer for face filter configuration
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        iou_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          default: 0.3
+    FaceFilterConfigRequest:
+      type: object
+      description: Serializer for face filter configuration
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        iou_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          default: 0.3
+    FishIdentification:
+      type: object
+      description: Serializer for FishIdentification model
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        image:
+          type: string
+          format: uri
+          nullable: true
+        image_url:
+          type: string
+          format: uri
+          readOnly: true
+        thumbnail:
+          type: string
+          format: uri
+          nullable: true
+        original_scientific_name:
+          type: string
+          description: AI-predicted scientific name
+          maxLength: 255
+        original_indonesian_name:
+          type: string
+          description: AI-predicted Indonesian name
+          maxLength: 255
+        original_english_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        original_kelompok:
+          type: string
+          nullable: true
+          description: Original group/kelompok
+          maxLength: 100
+        current_scientific_name:
+          type: string
+          description: Current scientific name (may be corrected)
+          maxLength: 255
+        current_indonesian_name:
+          type: string
+          description: Current Indonesian name (may be corrected)
+          maxLength: 255
+        current_english_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        current_kelompok:
+          type: string
+          nullable: true
+          maxLength: 100
+        confidence_score:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          description: AI confidence score (0-1)
+        ai_model_version:
+          type: string
+          nullable: true
+          maxLength: 50
+        detection_box:
+          nullable: true
+          description: Bounding box coordinates [x, y, width, height]
+        detection_score:
+          type: number
+          format: double
+          nullable: true
+        kb_candidates:
+          nullable: true
+          description: Knowledge base candidates used
+        status:
+          enum:
+          - pending
+          - verified
+          - corrected
+          - rejected
+          type: string
+          description: |-
+            * `pending` - Pending Review
+            * `verified` - Verified
+            * `corrected` - Corrected by User
+            * `rejected` - Rejected
+          x-spec-enum-id: af43346c7e91c697
+        is_corrected:
+          type: boolean
+          description: True if user corrected the identification
+        correction_notes:
+          type: string
+          nullable: true
+          description: User notes on correction
+        user_identifier:
+          type: string
+          nullable: true
+          description: User ID or session ID
+          maxLength: 255
+        user_location:
+          type: string
+          nullable: true
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        corrected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When user made correction
+        was_ai_correct:
+          type: boolean
+          readOnly: true
+      required:
+      - confidence_score
+      - created_at
+      - current_indonesian_name
+      - current_scientific_name
+      - id
+      - image_url
+      - original_indonesian_name
+      - original_scientific_name
+      - updated_at
+      - was_ai_correct
+    FishIdentificationCorrectionRequest:
+      type: object
+      description: Serializer for correcting fish identification
+      properties:
+        scientific_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        indonesian_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        english_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        kelompok:
+          type: string
+          nullable: true
+          maxLength: 100
+        notes:
+          type: string
+          nullable: true
+      required:
+      - indonesian_name
+      - scientific_name
+    FishIdentificationHistory:
+      type: object
+      description: Serializer for identification history
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        identification:
+          type: string
+          format: uuid
+        field_name:
+          type: string
+          description: Field that was changed
+          maxLength: 100
+        old_value:
+          type: string
+          nullable: true
+        new_value:
+          type: string
+          nullable: true
+        changed_by:
+          type: string
+          nullable: true
+          maxLength: 255
+        changed_at:
+          type: string
+          format: date-time
+          readOnly: true
+        change_reason:
+          type: string
+          nullable: true
+      required:
+      - changed_at
+      - field_name
+      - id
+      - identification
+    FishIdentificationRequest:
+      type: object
+      description: Serializer for FishIdentification model
+      properties:
+        image:
+          type: string
+          format: binary
+          nullable: true
+        thumbnail:
+          type: string
+          format: binary
+          nullable: true
+        original_scientific_name:
+          type: string
+          minLength: 1
+          description: AI-predicted scientific name
+          maxLength: 255
+        original_indonesian_name:
+          type: string
+          minLength: 1
+          description: AI-predicted Indonesian name
+          maxLength: 255
+        original_english_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        original_kelompok:
+          type: string
+          nullable: true
+          description: Original group/kelompok
+          maxLength: 100
+        current_scientific_name:
+          type: string
+          minLength: 1
+          description: Current scientific name (may be corrected)
+          maxLength: 255
+        current_indonesian_name:
+          type: string
+          minLength: 1
+          description: Current Indonesian name (may be corrected)
+          maxLength: 255
+        current_english_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        current_kelompok:
+          type: string
+          nullable: true
+          maxLength: 100
+        confidence_score:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          description: AI confidence score (0-1)
+        ai_model_version:
+          type: string
+          nullable: true
+          maxLength: 50
+        detection_box:
+          nullable: true
+          description: Bounding box coordinates [x, y, width, height]
+        detection_score:
+          type: number
+          format: double
+          nullable: true
+        kb_candidates:
+          nullable: true
+          description: Knowledge base candidates used
+        status:
+          enum:
+          - pending
+          - verified
+          - corrected
+          - rejected
+          type: string
+          description: |-
+            * `pending` - Pending Review
+            * `verified` - Verified
+            * `corrected` - Corrected by User
+            * `rejected` - Rejected
+          x-spec-enum-id: af43346c7e91c697
+        is_corrected:
+          type: boolean
+          description: True if user corrected the identification
+        correction_notes:
+          type: string
+          nullable: true
+          description: User notes on correction
+        user_identifier:
+          type: string
+          nullable: true
+          description: User ID or session ID
+          maxLength: 255
+        user_location:
+          type: string
+          nullable: true
+          maxLength: 255
+        corrected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When user made correction
+      required:
+      - confidence_score
+      - current_indonesian_name
+      - current_scientific_name
+      - original_indonesian_name
+      - original_scientific_name
+    FishIdentificationStatusRequest:
+      type: object
+      description: Serializer for updating status
+      properties:
+        status:
+          enum:
+          - pending
+          - verified
+          - corrected
+          - rejected
+          type: string
+          description: |-
+            * `pending` - pending
+            * `verified` - verified
+            * `corrected` - corrected
+            * `rejected` - rejected
+          x-spec-enum-id: cec7b4ef3b796fa4
+        notes:
+          type: string
+      required:
+      - status
+    ImageUploadRequest:
+      type: object
+      description: |-
+        Serializer for single image upload and fish recognition request.
+
+        Supports both image file upload and base64 encoded image data.
+      properties:
+        image:
+          type: string
+          format: binary
+          description: 'Image file to analyze (JPG, PNG, or other supported formats).
+            Max size: 10MB'
+        image_base64:
+          type: string
+          description: Base64 encoded image data as alternative to file upload
+        include_faces:
+          type: boolean
+          default: true
+          description: Whether to detect fish faces in the image
+        include_segmentation:
+          type: boolean
+          default: true
+          description: Whether to generate segmentation masks for detected fish
+        include_visualization:
+          type: boolean
+          default: false
+          description: Whether to return visualization image with detection boxes
+            and labels
+    LWFAdaptationRequest:
+      type: object
+      description: Serializer for Learning-Without-Forgetting adaptation requests
+      properties:
+        species_name:
+          type: string
+          minLength: 1
+        scientific_name:
+          type: string
+        augment_data:
+          type: boolean
+          default: true
+        images:
+          type: array
+          items:
+            type: string
+            format: binary
+        images_base64:
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+      - species_name
+    ModelConfigRequest:
+      type: object
+      description: Serializer for model configuration
+      properties:
+        confidence_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+        nms_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+        segmentation_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+        device:
+          enum:
+          - cpu
+          - cuda
+          type: string
+          description: |-
+            * `cpu` - cpu
+            * `cuda` - cuda
+          x-spec-enum-id: 40244afcd7ad806d
+        enable_caching:
+          type: boolean
+    PaginatedFishIdentificationHistoryList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FishIdentificationHistory'
+    PatchedFishIdentificationRequest:
+      type: object
+      description: Serializer for FishIdentification model
+      properties:
+        image:
+          type: string
+          format: binary
+          nullable: true
+        thumbnail:
+          type: string
+          format: binary
+          nullable: true
+        original_scientific_name:
+          type: string
+          minLength: 1
+          description: AI-predicted scientific name
+          maxLength: 255
+        original_indonesian_name:
+          type: string
+          minLength: 1
+          description: AI-predicted Indonesian name
+          maxLength: 255
+        original_english_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        original_kelompok:
+          type: string
+          nullable: true
+          description: Original group/kelompok
+          maxLength: 100
+        current_scientific_name:
+          type: string
+          minLength: 1
+          description: Current scientific name (may be corrected)
+          maxLength: 255
+        current_indonesian_name:
+          type: string
+          minLength: 1
+          description: Current Indonesian name (may be corrected)
+          maxLength: 255
+        current_english_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        current_kelompok:
+          type: string
+          nullable: true
+          maxLength: 100
+        confidence_score:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          description: AI confidence score (0-1)
+        ai_model_version:
+          type: string
+          nullable: true
+          maxLength: 50
+        detection_box:
+          nullable: true
+          description: Bounding box coordinates [x, y, width, height]
+        detection_score:
+          type: number
+          format: double
+          nullable: true
+        kb_candidates:
+          nullable: true
+          description: Knowledge base candidates used
+        status:
+          enum:
+          - pending
+          - verified
+          - corrected
+          - rejected
+          type: string
+          description: |-
+            * `pending` - Pending Review
+            * `verified` - Verified
+            * `corrected` - Corrected by User
+            * `rejected` - Rejected
+          x-spec-enum-id: af43346c7e91c697
+        is_corrected:
+          type: boolean
+          description: True if user corrected the identification
+        correction_notes:
+          type: string
+          nullable: true
+          description: User notes on correction
+        user_identifier:
+          type: string
+          nullable: true
+          description: User ID or session ID
+          maxLength: 255
+        user_location:
+          type: string
+          nullable: true
+          maxLength: 255
+        corrected_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When user made correction
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+servers:
+- url: http://localhost:8001
+  description: Local development server
+- url: https://smart-mancing.hellodigi.id
+  description: Production server
+tags:
+- name: Recognition
+  description: Fish recognition and detection endpoints
+- name: Health
+  description: Health check and system status
+- name: Configuration
+  description: Model configuration and settings
+- name: Identification
+  description: Fish identification history and management
+- name: Correction
+  description: Manual correction and feedback
+- name: Dataset
+  description: Dataset management and master data

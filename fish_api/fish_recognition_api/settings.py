@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',  # DRF Spectacular for API documentation
     'corsheaders',
     'channels',
     'recognition',
@@ -114,7 +115,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",
     "http://localhost:8001",
     "http://127.0.0.1:8001",
-    "https://smart-mancing.hellodigi.id"
+    "https://smart-mancing.hellodigi.id",
+    "https://fish.hellodigi.id",
 ]
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
@@ -127,6 +129,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "https://smart-mancing.hellodigi.id",
+    "https://fish.hellodigi.id",
 ]
 
 # Disable CSRF for API endpoints (they use csrf_exempt decorator)
@@ -257,6 +260,48 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# DRF Spectacular settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Fish Recognition API',
+    'DESCRIPTION': 'API for fish detection, classification, and recognition using AI models. Supports single and batch image processing with face detection, segmentation, and LLM-powered species verification.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api/v1/',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SERVERS': [
+        {'url': 'http://localhost:8001', 'description': 'Local development server'},
+        {'url': 'https://smart-mancing.hellodigi.id', 'description': 'Production server'},
+    ],
+    'CONTACT': {
+        'name': 'Fish Recognition API Team',
+        'email': 'support@example.com',
+    },
+    'LICENSE': {
+        'name': 'MIT',
+    },
+    'TAGS': [
+        {'name': 'Recognition', 'description': 'Fish recognition and detection endpoints'},
+        {'name': 'Health', 'description': 'Health check and system status'},
+        {'name': 'Configuration', 'description': 'Model configuration and settings'},
+        {'name': 'Identification', 'description': 'Fish identification history and management'},
+        {'name': 'Correction', 'description': 'Manual correction and feedback'},
+        {'name': 'Dataset', 'description': 'Dataset management and master data'},
+    ],
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+        'filter': True,
+        'tryItOutEnabled': True,
+    },
+    'PREPROCESSING_HOOKS': [],
+    'POSTPROCESSING_HOOKS': [],
+    'ENUM_NAME_OVERRIDES': {},
+    'SERVE_AUTHENTICATION': None,
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
 }
 
 # Fish Recognition Model Settings

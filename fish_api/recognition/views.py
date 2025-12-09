@@ -22,12 +22,16 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, JSONParser, FileUploadParser
 
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
+
 from .serializers import (
     ImageUploadSerializer, BatchImageUploadSerializer, RecognitionResultSerializer,
     BatchRecognitionResultSerializer, HealthCheckSerializer, PerformanceStatsSerializer,
     ModelConfigSerializer, FaceFilterConfigSerializer, LWFAdaptationSerializer
 )
 from .ml_models.fish_engine import get_fish_engine
+from . import schema_examples
 from .utils.image_utils import (
     base64_to_image, ImageQualityValidator, draw_detection_results, image_to_base64
 )
@@ -223,6 +227,25 @@ def _save_identification_to_db(
 logger = logging.getLogger(__name__)
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Health'],
+        summary='Health check endpoint',
+        description='Check the health status of the API and all AI models. Returns model loading status, device information, and processing statistics.',
+        responses={
+            200: OpenApiExample(
+                'Success',
+                value=schema_examples.HEALTH_CHECK_RESPONSE,
+                response_only=True,
+            ),
+            500: OpenApiExample(
+                'Unhealthy',
+                value=schema_examples.HEALTH_CHECK_UNHEALTHY_RESPONSE,
+                response_only=True,
+            ),
+        }
+    )
+)
 class HealthCheckView(APIView):
     """Health check endpoint for monitoring API status"""
     
@@ -253,6 +276,21 @@ class HealthCheckView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Health'],
+        summary='Get performance statistics',
+        description='Retrieve detailed performance metrics for all model components including average, min, and max processing times.',
+        responses={
+            200: OpenApiExample(
+                'Success',
+                value=schema_examples.PERFORMANCE_STATS_RESPONSE,
+                response_only=True,
+            ),
+            500: {'description': 'Internal server error'},
+        }
+    )
+)
 class PerformanceStatsView(APIView):
     """Performance statistics endpoint"""
     
@@ -273,6 +311,77 @@ class PerformanceStatsView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema_view(
+    post=extend_schema(
+        tags=['Recognition'],
+        summary='Recognize fish in single image',
+        description='''
+        Process a single image for fish detection, classification, and recognition.
+        
+        Features:
+        - Detects fish in the image using YOLO model
+        - Classifies detected fish species
+        - Performs segmentation for accurate fish boundaries
+        - Detects fish faces for quality assessment
+        - Uses LLM for species verification and knowledge base enrichment
+        - Saves identification to database for tracking and correction
+        
+        The image can be provided as either:
+        - Multipart file upload (`image` field)
+        - Base64 encoded string (`image_base64` field)
+        
+        Returns comprehensive detection results including bounding boxes, confidence scores, 
+        species classification, and optional visualization.
+        ''',
+        request=ImageUploadSerializer,
+        responses={
+            200: OpenApiExample(
+                'Fish detected successfully',
+                value=schema_examples.RECOGNITION_SUCCESS_RESPONSE,
+                response_only=True,
+            ),
+            '200-no-fish': OpenApiExample(
+                'No fish detected',
+                value=schema_examples.RECOGNITION_NO_FISH_RESPONSE,
+                response_only=True,
+            ),
+            400: OpenApiExample(
+                'Validation error',
+                value=schema_examples.QUALITY_VALIDATION_ERROR_RESPONSE,
+                response_only=True,
+            ),
+            500: OpenApiExample(
+                'Server error',
+                value=schema_examples.RECOGNITION_ERROR_RESPONSE,
+                response_only=True,
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                'File upload request',
+                description='Upload image as multipart form data',
+                value={
+                    'image': '(binary file)',
+                    'include_faces': True,
+                    'include_segmentation': True,
+                    'include_visualization': False
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Base64 request',
+                description='Upload image as base64 string',
+                value={
+                    'image_base64': '/9j/4AAQSkZJRgABAQAA...',
+                    'include_faces': True,
+                    'include_segmentation': True,
+                    'include_visualization': True
+                },
+                request_only=True,
+            ),
+        ]
+    )
+)
 @method_decorator(csrf_exempt, name='dispatch')
 class RecognizeImageView(APIView):
     """Single image recognition endpoint"""
@@ -481,6 +590,36 @@ class RecognizeImageView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema_view(
+    post=extend_schema(
+        tags=['Recognition'],
+        summary='Batch fish recognition',
+        description='''
+        Process multiple images (up to 10) in a single request for fish recognition.
+        
+        Features:
+        - Processes 1-10 images in parallel
+        - Aggregates species detection across all images
+        - Provides voting mechanism for species consensus
+        - Returns individual results for each image plus aggregate summary
+        
+        Useful for:
+        - Processing multiple angles of the same fish
+        - Analyzing fish schools or groups
+        - Batch processing of collected images
+        ''',
+        request=BatchImageUploadSerializer,
+        responses={
+            200: OpenApiExample(
+                'Batch processing success',
+                value=schema_examples.BATCH_SUCCESS_RESPONSE,
+                response_only=True,
+            ),
+            400: {'description': 'Invalid request - check image count (1-10) and formats'},
+            500: {'description': 'Server error during batch processing'},
+        }
+    )
+)
 @method_decorator(csrf_exempt, name='dispatch')
 class RecognizeBatchView(APIView):
     """Batch image recognition endpoint"""
@@ -610,6 +749,41 @@ class RecognizeBatchView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Configuration'],
+        summary='Get current model configuration',
+        description='Retrieve current AI model configuration settings including thresholds and device.',
+        responses={
+            200: OpenApiExample(
+                'Current configuration',
+                value=schema_examples.MODEL_CONFIG_GET_RESPONSE,
+                response_only=True,
+            ),
+        }
+    ),
+    post=extend_schema(
+        tags=['Configuration'],
+        summary='Update model configuration',
+        description='Update AI model configuration settings. Changes apply immediately to subsequent requests.',
+        request=ModelConfigSerializer,
+        responses={
+            200: OpenApiExample(
+                'Configuration updated',
+                value=schema_examples.MODEL_CONFIG_RESPONSE,
+                response_only=True,
+            ),
+            400: {'description': 'Invalid configuration values'},
+        },
+        examples=[
+            OpenApiExample(
+                'Update thresholds',
+                value=schema_examples.MODEL_CONFIG_UPDATE_REQUEST,
+                request_only=True,
+            ),
+        ]
+    )
+)
 class ModelConfigView(APIView):
     """Model configuration endpoint"""
     
@@ -648,6 +822,34 @@ class ModelConfigView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Configuration'],
+        summary='Get face filter configuration',
+        description='Retrieve current face filter settings for fish detection quality control.',
+        responses={200: FaceFilterConfigSerializer},
+    ),
+    post=extend_schema(
+        tags=['Configuration'],
+        summary='Update face filter configuration',
+        description='Configure face detection filtering to improve fish detection quality.',
+        request=FaceFilterConfigSerializer,
+        responses={
+            200: OpenApiExample(
+                'Configuration updated',
+                value=schema_examples.FACE_FILTER_CONFIG_RESPONSE,
+                response_only=True,
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                'Update face filter',
+                value=schema_examples.FACE_FILTER_CONFIG_REQUEST,
+                request_only=True,
+            ),
+        ]
+    )
+)
 class FaceFilterConfigView(APIView):
     """Face filter configuration endpoint"""
     
@@ -694,6 +896,37 @@ class FaceFilterConfigView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    tags=['Configuration'],
+    summary='Adapt model with new species data',
+    description='''
+    Add new species to the classification model using Learning-Without-Forgetting (LWF) technique.
+    
+    This endpoint allows you to extend the model's knowledge with new fish species
+    without retraining from scratch. Upload images of the new species and the model
+    will adapt its embeddings while preserving existing knowledge.
+    ''',
+    request=LWFAdaptationSerializer,
+    responses={
+        200: {
+            'description': 'Adaptation successful',
+            'examples': {
+                'application/json': {
+                    'species_id': 51,
+                    'species_name': 'Ikan Baru',
+                    'scientific_name': 'Novus piscis',
+                    'new_embeddings': 15,
+                    'total_embeddings': 215,
+                    'majority_ratio': 0.85,
+                    'centroid_shift': 0.12,
+                    'augment_used': True
+                }
+            }
+        },
+        400: {'description': 'Invalid request or no valid images'},
+        500: {'description': 'Adaptation failed'},
+    }
+)
 class LWFEmbeddingAdaptationView(APIView):
     """Learning-Without-Forgetting embedding adaptation endpoint"""
 
@@ -789,6 +1022,42 @@ from .serializers import (
 from .services.minio_service import get_minio_service
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Identification'],
+        summary='List all fish identifications',
+        description='''
+        Retrieve paginated list of all fish identifications with filtering options.
+        
+        Supports filtering by:
+        - Status (pending, verified, corrected, rejected)
+        - Correction status (is_corrected)
+        - Date range
+        - Species name
+        - User identifier
+        ''',
+        parameters=[
+            OpenApiParameter('status', type=str, description='Filter by status'),
+            OpenApiParameter('is_corrected', type=bool, description='Filter by correction status'),
+            OpenApiParameter('search', type=str, description='Search in species names'),
+            OpenApiParameter('page', type=int, description='Page number'),
+        ],
+        responses={
+            200: OpenApiExample(
+                'Identification list',
+                value=schema_examples.IDENTIFICATION_LIST_RESPONSE,
+                response_only=True,
+            ),
+        }
+    ),
+    post=extend_schema(
+        tags=['Identification'],
+        summary='Create fish identification',
+        description='Create new fish identification record (typically used internally after recognition).',
+        request=FishIdentificationSerializer,
+        responses={201: FishIdentificationSerializer},
+    )
+)
 class FishIdentificationListCreateView(generics.ListCreateAPIView):
     """
     List all fish identifications or create a new one
@@ -843,6 +1112,41 @@ class FishIdentificationListCreateView(generics.ListCreateAPIView):
         return queryset
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Identification'],
+        summary='Get identification details',
+        description='Retrieve detailed information about a specific fish identification including images, AI predictions, and correction history.',
+        responses={
+            200: OpenApiExample(
+                'Identification details',
+                value=schema_examples.IDENTIFICATION_DETAIL_RESPONSE,
+                response_only=True,
+            ),
+            404: schema_examples.NOT_FOUND_ERROR_RESPONSE,
+        }
+    ),
+    put=extend_schema(
+        tags=['Identification'],
+        summary='Update identification',
+        description='Update fish identification details.',
+        request=FishIdentificationSerializer,
+        responses={200: FishIdentificationSerializer},
+    ),
+    patch=extend_schema(
+        tags=['Identification'],
+        summary='Partially update identification',
+        description='Partially update fish identification details.',
+        request=FishIdentificationSerializer,
+        responses={200: FishIdentificationSerializer},
+    ),
+    delete=extend_schema(
+        tags=['Identification'],
+        summary='Delete identification',
+        description='Delete a fish identification record.',
+        responses={204: None},
+    )
+)
 class FishIdentificationDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     Retrieve, update, or delete a fish identification
@@ -859,6 +1163,36 @@ class FishIdentificationDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = 'id'
 
 
+@extend_schema(
+    tags=['Correction'],
+    summary='Correct fish identification',
+    description='''
+    Submit manual correction for AI-identified fish species.
+    
+    Use this endpoint when the AI misidentified a fish species. Corrections are tracked
+    and used to improve the model over time. The system maintains both original AI
+    predictions and corrected values for accuracy tracking.
+    
+    All corrections are logged in the identification history for audit purposes.
+    ''',
+    request=FishIdentificationCorrectionSerializer,
+    responses={
+        200: OpenApiExample(
+            'Correction successful',
+            value=schema_examples.IDENTIFICATION_CORRECTION_RESPONSE,
+            response_only=True,
+        ),
+        400: {'description': 'Invalid correction data'},
+        404: schema_examples.NOT_FOUND_ERROR_RESPONSE,
+    },
+    examples=[
+        OpenApiExample(
+            'Correct species',
+            value=schema_examples.IDENTIFICATION_CORRECTION_REQUEST,
+            request_only=True,
+        ),
+    ]
+)
 class FishIdentificationCorrectView(APIView):
     """
     Correct a fish identification
@@ -952,6 +1286,22 @@ class FishIdentificationCorrectView(APIView):
         return Response(result_data, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Correction'],
+    summary='Verify correct identification',
+    description='''
+    Confirm that the AI correctly identified the fish species.
+    
+    Use this endpoint when you've reviewed the AI's identification and confirmed
+    it is accurate. This helps track the model's accuracy and builds confidence
+    in its predictions.
+    ''',
+    request=FishIdentificationStatusSerializer,
+    responses={
+        200: {'description': 'Verification successful', 'type': 'object'},
+        404: schema_examples.NOT_FOUND_ERROR_RESPONSE,
+    }
+)
 class FishIdentificationVerifyView(APIView):
     """
     Verify a fish identification as correct
@@ -981,6 +1331,23 @@ class FishIdentificationVerifyView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Correction'],
+    summary='Reject identification',
+    description='''
+    Mark an identification as rejected.
+    
+    Use this when:
+    - The image does not contain a fish
+    - Image quality is too poor for accurate identification
+    - The detection was a false positive
+    ''',
+    request=FishIdentificationStatusSerializer,
+    responses={
+        200: {'description': 'Rejection successful', 'type': 'object'},
+        404: schema_examples.NOT_FOUND_ERROR_RESPONSE,
+    }
+)
 class FishIdentificationRejectView(APIView):
     """
     Reject a fish identification
@@ -1013,6 +1380,12 @@ class FishIdentificationRejectView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Identification'],
+    summary='Get identification history',
+    description='Retrieve complete change history for a fish identification including all corrections and status changes.',
+    responses={200: FishIdentificationHistorySerializer(many=True)}
+)
 class FishIdentificationHistoryView(generics.ListAPIView):
     """
     Get history of changes for a fish identification
@@ -1030,6 +1403,31 @@ class FishIdentificationHistoryView(generics.ListAPIView):
         )
 
 
+@extend_schema(
+    tags=['Identification'],
+    summary='Get species statistics',
+    description='''
+    Retrieve comprehensive statistics for all identified fish species.
+    
+    Includes:
+    - Total identification count per species
+    - AI accuracy rate (correct vs corrected)
+    - Average confidence scores
+    - First and last seen dates
+    ''',
+    parameters=[
+        OpenApiParameter('kelompok', type=str, description='Filter by fish group'),
+        OpenApiParameter('min_identifications', type=int, description='Minimum identification count'),
+        OpenApiParameter('search', type=str, description='Search in species names'),
+    ],
+    responses={
+        200: OpenApiExample(
+            'Species statistics',
+            value=schema_examples.SPECIES_STATISTICS_RESPONSE,
+            response_only=True,
+        ),
+    }
+)
 class FishSpeciesStatisticsView(generics.ListAPIView):
     """
     Get statistics for all fish species
@@ -1059,6 +1457,15 @@ class FishSpeciesStatisticsView(generics.ListAPIView):
         return queryset
 
 
+@extend_schema(
+    tags=['Health'],
+    summary='Check MinIO storage health',
+    description='Verify MinIO object storage connectivity and health status.',
+    responses={
+        200: {'description': 'MinIO is healthy', 'type': 'object'},
+        500: {'description': 'MinIO is unavailable or disabled'},
+    }
+)
 class MinIOHealthCheckView(APIView):
     """
     Check MinIO service health
@@ -1073,6 +1480,32 @@ class MinIOHealthCheckView(APIView):
         return Response(health, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Dataset'],
+    summary='Export dataset for training',
+    description='''
+    Export fish identification dataset in various formats for model training or analysis.
+    
+    Supports:
+    - JSON format (default)
+    - CSV format (for data analysis)
+    - YOLO format (for object detection training)
+    
+    Filters allow exporting specific subsets (verified only, date range, specific species).
+    ''',
+    parameters=[
+        OpenApiParameter('format', type=str, enum=['json', 'csv', 'yolo'], description='Export format', default='json'),
+        OpenApiParameter('status', type=str, description='Filter by status'),
+        OpenApiParameter('kelompok', type=str, description='Filter by fish group'),
+        OpenApiParameter('use_corrected', type=bool, description='Use corrected names', default=True),
+        OpenApiParameter('date_from', type=str, description='Start date (YYYY-MM-DD)'),
+        OpenApiParameter('date_to', type=str, description='End date (YYYY-MM-DD)'),
+    ],
+    responses={
+        200: {'description': 'Dataset exported successfully'},
+        400: {'description': 'Invalid parameters'},
+    }
+)
 class ExportDatasetView(APIView):
     """
     Export identifications as training dataset
@@ -1222,6 +1655,37 @@ class ExportDatasetView(APIView):
             }, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Dataset'],
+    summary='Get dataset statistics',
+    description='''
+    Retrieve comprehensive statistics about the fish identification dataset.
+    
+    Includes:
+    - Total identifications and distribution by status
+    - Species distribution and diversity metrics
+    - Temporal patterns (identifications over time)
+    - Quality metrics (confidence scores, correction rates)
+    - User and geographic distribution
+    ''',
+    responses={
+        200: {
+            'description': 'Dataset statistics',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'total_identifications': 1500,
+                        'by_status': {'verified': 1200, 'corrected': 250, 'pending': 50},
+                        'unique_species': 45,
+                        'avg_confidence': 0.87,
+                        'accuracy_rate': 0.83,
+                        'correction_rate': 0.17
+                    }
+                }
+            }
+        },
+    }
+)
 class DatasetStatisticsView(APIView):
     """
     Get dataset statistics for training
@@ -1333,6 +1797,39 @@ class FishMasterDataPagination(PageNumberPagination):
     max_page_size = 200
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Dataset'],
+        summary='List fish master data',
+        description='''
+        Retrieve fish species master data from the knowledge base.
+        
+        This endpoint provides the reference database of known fish species
+        with their Indonesian names, scientific names, and characteristics.
+        ''',
+        parameters=[
+            OpenApiParameter('search', type=str, description='Search in species names'),
+            OpenApiParameter('kelompok', type=str, description='Filter by fish group'),
+            OpenApiParameter('jenis_perairan', type=str, description='Filter by water type'),
+            OpenApiParameter('page', type=int, description='Page number'),
+            OpenApiParameter('page_size', type=int, description='Items per page (max 200)'),
+        ],
+        responses={
+            200: OpenApiExample(
+                'Master data list',
+                value=schema_examples.MASTER_DATA_RESPONSE,
+                response_only=True,
+            ),
+        }
+    ),
+    post=extend_schema(
+        tags=['Dataset'],
+        summary='Create master data entry',
+        description='Add new fish species to the master data knowledge base.',
+        request={'application/json': {'type': 'object'}},
+        responses={201: {'description': 'Master data created successfully'}},
+    )
+)
 class FishMasterDataListCreateView(APIView):
     """
     GET: List all master data with filtering and search
@@ -1414,6 +1911,27 @@ class FishMasterDataListCreateView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Dataset'],
+        summary='Get master data details',
+        description='Retrieve detailed information about a specific fish species from master data.',
+        responses={200: {'type': 'object'}, 404: schema_examples.NOT_FOUND_ERROR_RESPONSE},
+    ),
+    put=extend_schema(
+        tags=['Dataset'],
+        summary='Update master data',
+        description='Update fish species information in master data.',
+        request={'application/json': {'type': 'object'}},
+        responses={200: {'description': 'Updated successfully'}},
+    ),
+    delete=extend_schema(
+        tags=['Dataset'],
+        summary='Delete master data',
+        description='Remove fish species from master data.',
+        responses={204: None},
+    )
+)
 class FishMasterDataDetailView(APIView):
     """
     GET: Retrieve specific master data entry
@@ -1480,6 +1998,35 @@ class FishMasterDataDetailView(APIView):
         )
 
 
+@extend_schema(
+    tags=['Dataset'],
+    summary='Get master data statistics',
+    description='''
+    Retrieve statistics about the fish master data knowledge base.
+    
+    Includes counts by:
+    - Fish groups (kelompok)
+    - Water types (jenis_perairan)
+    - Conservation status
+    - Total species count
+    ''',
+    responses={
+        200: {
+            'description': 'Master data statistics',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'total_species': 150,
+                        'by_kelompok': {'Ikan Pelagis': 45, 'Ikan Demersal': 38},
+                        'by_water_type': {'Laut': 90, 'Air Tawar': 45, 'Air Payau': 15},
+                        'protected_species': 12,
+                        'ornamental_species': 28
+                    }
+                }
+            }
+        },
+    }
+)
 class FishMasterDataStatsView(APIView):
     """Get statistics about master data"""
     
